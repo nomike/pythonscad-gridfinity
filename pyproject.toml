@@ -1,0 +1,44 @@
+[build-system]
+requires = ["setuptools>=68.0", "setuptools-scm>=8.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pythonscad-gridfinity"
+version = "0.1.0"
+description = "Gridfinity baseplates and bins for PythonSCAD"
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.10"
+authors = [
+    {name = "nomike", email = "nomike@nomike.com"},
+]
+keywords = ["gridfinity", "pythonscad", "openscad", "3d-printing", "parametric", "cad"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Manufacturing",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering",
+]
+
+[project.urls]
+Homepage = "https://github.com/nomike/pythonscad-gridfinity"
+Repository = "https://github.com/nomike/pythonscad-gridfinity"
+Issues = "https://github.com/nomike/pythonscad-gridfinity/issues"
+
+[tool.ruff.lint]
+ignore = [
+    "F403",  # `from openscad import *` is the standard PythonSCAD usage
+    "F405",  # Names from star imports are resolved at runtime by PythonSCAD
+]
+
+[tool.ruff.lint.per-file-ignores]
+"examples/*" = ["E402"]  # Examples need sys.path setup before imports
+"test_*.py" = ["E402"]
+
+[tool.setuptools.packages.find]
+include = ["pythonscad_gridfinity*"]
