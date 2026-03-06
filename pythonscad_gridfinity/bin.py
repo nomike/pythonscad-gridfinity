@@ -48,7 +48,7 @@ from .helpers import (
 
 
 TAB_STYLES = ("full", "auto", "left", "center", "right", "none")
-LIP_STYLES = ("normal", "reduced", "none")
+LIP_STYLES = ("normal", "reduced", "none", "subtractive")
 HEIGHT_MODES = ("units", "mm_internal", "mm_external")
 
 
@@ -118,6 +118,11 @@ class GridfinityBin:
             When provided, *div_x* / *div_y* are ignored and each
             Compartment specifies its own position, size, scoop, and
             tab style in fractional grid units.  Compartments may overlap.
+        lite: If True, build a lite bin with a hollow shell base instead
+            of the standard solid base profile.  Uses less material and
+            prints faster.
+        base_thickness: Bottom layer thickness in mm for lite bins
+            (default 1.0).  Ignored when *lite* is False.
     """
 
     def __init__(
@@ -137,6 +142,8 @@ class GridfinityBin:
         solid=False,
         solid_ratio=1.0,
         compartments=None,
+        lite=False,
+        base_thickness=1.0,
     ):
         self.spec = spec or GridfinitySpec()
         self.grid_x = grid_x
@@ -152,6 +159,8 @@ class GridfinityBin:
         self.solid = solid
         self.solid_ratio = max(0.0, min(float(solid_ratio), 1.0))
         self.compartments = compartments
+        self.lite = lite
+        self.base_thickness = max(0.0, float(base_thickness))
 
         if tab_style not in TAB_STYLES:
             raise ValueError(
@@ -175,7 +184,7 @@ class GridfinityBin:
         s = self.spec
         if self.height_mode == "units":
             h = self.height_u * s.HEIGHT_UNIT
-            if self.lip_style == "reduced":
+            if self.lip_style in ("reduced", "subtractive"):
                 h -= s.STACKING_LIP_HEIGHT
             return h
         elif self.height_mode == "mm_internal":
@@ -280,6 +289,128 @@ class GridfinityBin:
             base = placed if base is None else (base | placed)
 
         return base
+
+    # ------------------------------------------------------------------
+    # Lite base (hollow shell)
+    # ------------------------------------------------------------------
+
+    def _build_base_lite(self):
+        """Build a hollow shell base for lite bins.
+
+        Instead of the solid per-cell base profiles, this creates a thin
+        outer shell that follows the base profile shape and a flat bottom
+        at *base_thickness* height.  This saves material and print time.
+
+        Returns:
+            A 3D PythonSCAD object centered in XY, bottom at z=0.
+        """
+        s = self.spec
+        cell = s.GRID_SIZE
+        top_dim = s.BASE_TOP_DIMENSIONS
+        top_r = s.BASE_TOP_RADIUS
+        wall_t = s.WALL_THICKNESS
+        bt = min(self.base_thickness, s.BASE_PROFILE_HEIGHT)
+
+        inner = [top_dim[0] - 2 * top_r, top_dim[1] - 2 * top_r]
+
+        def rr(radius):
+            return rounded_square(
+                [inner[0] + 2 * radius, inner[1] + 2 * radius],
+                max(radius, 0.01),
+                center=True,
+            )
+
+        profile = s.BASE_PROFILE
+        thin = 0.01
+        overlap = 0.001
+
+        z1 = profile[1][1]
+        z2 = profile[2][1]
+        z3 = profile[3][1]
+        z4 = s.BASE_HEIGHT
+
+        r0 = top_r - profile[3][0]
+        r1 = top_r - profile[3][0] + profile[1][0]
+        r3 = top_r
+
+        # Outer shell for one cell
+        bot = rr(r0).linear_extrude(height=thin)
+        top = rr(r1).linear_extrude(height=thin).up(z1)
+        outer = hull(bot, top)
+        outer = outer | rr(r1).linear_extrude(
+            height=(z2 - z1) + 2 * overlap
+        ).up(z1 - overlap)
+        bot2 = rr(r1).linear_extrude(height=thin).up(z2 - overlap)
+        top2 = rr(r3).linear_extrude(height=thin).up(z3)
+        outer = outer | hull(bot2, top2)
+        outer = outer | rr(r3).linear_extrude(
+            height=(z4 - z3) + overlap
+        ).up(z3 - overlap)
+
+        # Inner cavity: shrink radii by wall_thickness
+        ir0 = max(r0 - wall_t, 0.01)
+        ir1 = max(r1 - wall_t, 0.01)
+        ir3 = max(r3 - wall_t, 0.01)
+
+        def rr_inner(radius):
+            return rounded_square(
+                [inner[0] + 2 * radius, inner[1] + 2 * radius],
+                max(radius, 0.01),
+                center=True,
+            )
+
+        i_bot = rr_inner(ir0).linear_extrude(height=thin)
+        i_top = rr_inner(ir1).linear_extrude(height=thin).up(z1)
+        cavity = hull(i_bot, i_top)
+        cavity = cavity | rr_inner(ir1).linear_extrude(
+            height=(z2 - z1) + 2 * overlap
+        ).up(z1 - overlap)
+        i_bot2 = rr_inner(ir1).linear_extrude(height=thin).up(z2 - overlap)
+        i_top2 = rr_inner(ir3).linear_extrude(height=thin).up(z3)
+        cavity = cavity | hull(i_bot2, i_top2)
+        cavity = cavity | rr_inner(ir3).linear_extrude(
+            height=(z4 - z3) + 2 * overlap
+        ).up(z3 - overlap)
+
+        # Cut cavity above bottom_thickness
+        cavity = cavity - cube(
+            [top_dim[0] + 1, top_dim[1] + 1, bt + overlap],
+            center=True,
+        ).up((bt + overlap) / 2 - overlap)
+
+        single_cell = outer - cavity
+
+        # Solid bridge across all cells at the top
+        grid_outer = [
+            self.grid_x * cell - s.BASE_GAP,
+            self.grid_y * cell - s.BASE_GAP,
+        ]
+        bridge = rounded_square_3d(
+            grid_outer, top_r, z4 - z3 + overlap, center_xy=True
+        ).up(z3 - overlap)
+
+        bridge_inner = rounded_square_3d(
+            [grid_outer[0] - 2 * wall_t, grid_outer[1] - 2 * wall_t],
+            max(top_r - wall_t, 0.01),
+            z4 - z3 + 3 * overlap,
+            center_xy=True,
+        ).up(z3 - 2 * overlap)
+
+        bridge = bridge - bridge_inner
+
+        # Bottom solid layer across all cells
+        if bt > 0:
+            bottom_slab = rounded_square_3d(
+                grid_outer, top_r, bt, center_xy=True
+            )
+            bridge = bridge | bottom_slab
+
+        base = None
+        for cx, cy in grid_positions([self.grid_x, self.grid_y], cell, center=True):
+            placed = single_cell.translate([cx, cy, 0])
+            base = placed if base is None else (base | placed)
+
+        return base | bridge
 
     # ------------------------------------------------------------------
     # Outer body
@@ -677,7 +808,7 @@ class GridfinityBin:
         comp_h = wall_h - s.FLOOR_THICKNESS
 
         # ---- 1. Base ----
-        base = self._build_base()
+        base = self._build_base_lite() if self.lite else self._build_base()
 
         # ---- 2. Outer body ----
         body = self._build_body()
@@ -686,6 +817,10 @@ class GridfinityBin:
         if self.lip_style == "normal":
             lip = self._build_lip()
             body = body | lip
+        elif self.lip_style == "subtractive":
+            # Remove the lip zone from the top of the bin
+            lip_cutter = self._build_lip()
+            body = body - lip_cutter
 
         # ---- 4. Subtract compartment cutters ----
         if not self.solid:

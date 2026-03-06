@@ -94,3 +94,21 @@ bin_custom = GridfinityBin(
     hole_options=HoleOptions(magnet_hole=True),
 )
 bin_custom.render().color("CadetBlue").translate([300, -80, 0]).show()
+
+# --- Example 8: 2x2 lite bin with hollow base ---
+bin_lite = GridfinityBin(
+    2, 2, 6,
+    div_x=2, div_y=2,
+    lite=True,
+    base_thickness=1.0,
+    hole_options=HoleOptions(magnet_hole=True),
+)
+bin_lite.render().color("LightCoral").translate([0, -240, 0]).show()
+
+# --- Example 9: 2x1 lite bin with subtractive lip ---
+bin_lite_sub = GridfinityBin(
+    2, 1, 4,
+    lite=True,
+    lip_style="subtractive",
+)
+bin_lite_sub.render().color("DarkSalmon").translate([150, -240, 0]).show()

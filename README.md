@@ -42,6 +42,7 @@ Gridfinity objects directly from Python scripts inside PythonSCAD.
 - Finger scoops (adjustable weight 0--1).
 - Label tabs (full, auto, left, center, right, or none).
 - Stacking lip (normal, reduced, or none).
+- Lite bins with hollow shell bases for faster printing and less material.
 - Solid bin option with configurable fill ratio.
 - Bottom magnet/screw holes (same options as baseplates).
 - Interior edge fillets using PythonSCAD's native `.fillet()`.
@@ -185,6 +186,21 @@ b = GridfinityBin(
 b.render().color("CadetBlue").show()
 ```
 
+### Lite bin with hollow base (2 x 2, 6U)
+
+```python
+from pythonscad_gridfinity import GridfinityBin, HoleOptions
+
+b = GridfinityBin(
+    2, 2, 6,
+    div_x=2, div_y=2,
+    lite=True,
+    base_thickness=1.0,
+    hole_options=HoleOptions(magnet_hole=True),
+)
+b.render().color("LightCoral").show()
+```
+
 ## Baseplate styles
 
 | Style | Description |
@@ -230,6 +246,7 @@ Tabs are automatically disabled when the bin is shorter than 3 height units.
 | `"normal"` | Standard stacking lip for stacking bins. |
 | `"reduced"` | No lip, height is reduced accordingly. |
 | `"none"` | No lip, but total height is preserved. |
+| `"subtractive"` | Lip zone is subtracted from the bin top (for lite bins). Height is reduced. |
 
 ### Height modes
 
@@ -288,6 +305,8 @@ GridfinityBin(
     solid=False,            # Fill the interior (no compartments)
     solid_ratio=1.0,        # Fill fraction when solid (0.0--1.0)
     compartments=None,      # List of Compartment objects (overrides div_x/div_y)
+    lite=False,             # Hollow shell base for faster printing
+    base_thickness=1.0,     # Bottom thickness in mm (lite bins only)
 )
 ```
 
