@@ -18,9 +18,23 @@ Usage:
         hole_options=HoleOptions(magnet_hole=True),
     )
     b.render().show()
+
+    # Custom compartment layout
+    from pythonscad_gridfinity import Compartment
+    b = GridfinityBin(
+        3, 2, 6,
+        compartments=[
+            Compartment(0, 0, 2, 1, scoop=1.0, tab_style="left"),
+            Compartment(2, 0, 1, 2, scoop=0.5, tab_style="right"),
+            Compartment(0, 1, 2, 1, tab_style="none"),
+        ],
+        hole_options=HoleOptions(magnet_hole=True),
+    )
+    b.render().show()
 """
 
 import math
+from dataclasses import dataclass, field
 
 from openscad import *
 
@@ -36,6 +50,44 @@ from .helpers import (
 TAB_STYLES = ("full", "auto", "left", "center", "right", "none")
 LIP_STYLES = ("normal", "reduced", "none")
 HEIGHT_MODES = ("units", "mm_internal", "mm_external")
+
+
+@dataclass
+class Compartment:
+    """Defines one compartment in a custom layout.
+
+    Positions and sizes are in fractional grid units relative to the
+    bin's grid_x / grid_y.  For example, in a 3x2 bin a compartment
+    at ``(0, 0)`` with size ``(1.5, 1)`` occupies the left half of
+    the bottom row.
+
+    Compartments may overlap — the union of all cutters is subtracted
+    from the bin body.
+
+    Args:
+        x: Fractional grid X position of the compartment's left edge.
+        y: Fractional grid Y position of the compartment's front edge.
+        w: Fractional grid width (X).
+        h: Fractional grid depth (Y).
+        scoop: Scoop weight 0.0–1.0.  None inherits from the bin.
+        tab_style: Tab placement.  None inherits from the bin.
+    """
+
+    x: float
+    y: float
+    w: float
+    h: float
+    scoop: float | None = None
+    tab_style: str | None = None
+
+    def __post_init__(self):
+        if self.w <= 0 or self.h <= 0:
+            raise ValueError("Compartment w and h must be positive")
+        if self.tab_style is not None and self.tab_style not in TAB_STYLES:
+            raise ValueError(
+                f"Unknown tab_style '{self.tab_style}'. "
+                f"Must be one of {TAB_STYLES}"
+            )
 
 
 class GridfinityBin:
@@ -62,6 +114,10 @@ class GridfinityBin:
         height_mode: How to interpret *height_u*. One of HEIGHT_MODES.
         solid: If True, fill the interior (no compartments).
         solid_ratio: When solid, fraction of interior to fill (0.0--1.0).
+        compartments: List of Compartment objects for custom layouts.
+            When provided, *div_x* / *div_y* are ignored and each
+            Compartment specifies its own position, size, scoop, and
+            tab style in fractional grid units.  Compartments may overlap.
     """
 
     def __init__(
@@ -80,6 +136,7 @@ class GridfinityBin:
         height_mode="units",
         solid=False,
         solid_ratio=1.0,
+        compartments=None,
     ):
         self.spec = spec or GridfinitySpec()
         self.grid_x = grid_x
@@ -94,6 +151,7 @@ class GridfinityBin:
         self.height_mode = height_mode
         self.solid = solid
         self.solid_ratio = max(0.0, min(float(solid_ratio), 1.0))
+        self.compartments = compartments
 
         if tab_style not in TAB_STYLES:
             raise ValueError(
@@ -512,6 +570,91 @@ class GridfinityBin:
         return tab_3d
 
     # ------------------------------------------------------------------
+    # Compartment layout helpers
+    # ------------------------------------------------------------------
+
+    def _cut_grid_compartments(self, body, comp_h, d_magic, gx, gy, cell, cutter_z):
+        """Cut equal-grid compartments defined by div_x / div_y."""
+        s = self.spec
+        nx, ny = self.div_x, self.div_y
+
+        for ix in range(nx):
+            for iy in range(ny):
+                fx = ix / nx
+                fy = iy / ny
+                fw = 1.0 / nx
+                fh = 1.0 / ny
+
+                comp_w = fw * (gx * cell + d_magic) - s.DIVIDER_WIDTH
+                comp_d = fh * (gy * cell + d_magic) - s.DIVIDER_WIDTH
+
+                cx = (fx + fw / 2 - 0.5) * (gx * cell + d_magic)
+                cy = (fy + fh / 2 - 0.5) * (gy * cell + d_magic)
+
+                is_front = iy == 0
+                is_back = iy == ny - 1
+                is_left = ix == 0
+                is_right = ix == nx - 1
+
+                if self.tab_style == "auto":
+                    if is_left:
+                        tab_resolved = "left"
+                    elif is_right:
+                        tab_resolved = "right"
+                    else:
+                        tab_resolved = "center"
+                else:
+                    tab_resolved = self.tab_style
+
+                cutter = self._compartment_cutter(
+                    comp_w, comp_d, comp_h,
+                    tab_resolved, is_front, is_back, is_left, is_right,
+                )
+                body = body - cutter.translate([cx, cy, cutter_z])
+
+        return body
+
+    def _cut_custom_compartments(self, body, comp_h, d_magic, gx, gy, cell, cutter_z):
+        """Cut compartments from a list of Compartment objects."""
+        s = self.spec
+        total_w = gx * cell + d_magic
+        total_d = gy * cell + d_magic
+
+        for comp in self.compartments:
+            comp_w = (comp.w / gx) * total_w - s.DIVIDER_WIDTH
+            comp_d = (comp.h / gy) * total_d - s.DIVIDER_WIDTH
+
+            cx = ((comp.x + comp.w / 2) / gx - 0.5) * total_w
+            cy = ((comp.y + comp.h / 2) / gy - 0.5) * total_d
+
+            is_front = comp.y <= 0
+            is_back = (comp.y + comp.h) >= gy
+            is_left = comp.x <= 0
+            is_right = (comp.x + comp.w) >= gx
+
+            scoop_val = comp.scoop if comp.scoop is not None else self.scoop
+            tab = comp.tab_style if comp.tab_style is not None else self.tab_style
+
+            if tab == "auto":
+                if is_left:
+                    tab = "left"
+                elif is_right:
+                    tab = "right"
+                else:
+                    tab = "center"
+
+            saved_scoop = self.scoop
+            self.scoop = max(0.0, min(float(scoop_val), 1.0))
+            cutter = self._compartment_cutter(
+                comp_w, comp_d, comp_h,
+                tab, is_front, is_back, is_left, is_right,
+            )
+            self.scoop = saved_scoop
+            body = body - cutter.translate([cx, cy, cutter_z])
+
+        return body
+
+    # ------------------------------------------------------------------
     # Main render
     # ------------------------------------------------------------------
 
@@ -546,56 +689,18 @@ class GridfinityBin:
 
         # ---- 4. Subtract compartment cutters ----
         if not self.solid:
-            # Compartment sizing from the OpenSCAD formulas
             d_magic = -2 * s.FIT_CLEARANCE - 2 * s.WALL_THICKNESS + s.DIVIDER_WIDTH
             gx, gy = self.grid_x, self.grid_y
-            nx, ny = self.div_x, self.div_y
+            cutter_z = floor_z + s.FLOOR_THICKNESS
 
-            for ix in range(nx):
-                for iy in range(ny):
-                    # Fractional position and size in grid units
-                    fx = ix / nx
-                    fy = iy / ny
-                    fw = 1.0 / nx
-                    fh = 1.0 / ny
-
-                    comp_w = fw * (gx * cell + d_magic) - s.DIVIDER_WIDTH
-                    comp_d = fh * (gy * cell + d_magic) - s.DIVIDER_WIDTH
-
-                    # Center position of this compartment
-                    cx = (fx + fw / 2 - 0.5) * (gx * cell + d_magic)
-                    cy = (fy + fh / 2 - 0.5) * (gy * cell + d_magic)
-
-                    is_front = iy == 0
-                    is_back = iy == ny - 1
-                    is_left = ix == 0
-                    is_right = ix == nx - 1
-
-                    # Resolve "auto" tab style
-                    if self.tab_style == "auto":
-                        if is_left:
-                            tab_resolved = "left"
-                        elif is_right:
-                            tab_resolved = "right"
-                        else:
-                            tab_resolved = "center"
-                    else:
-                        tab_resolved = self.tab_style
-
-                    cutter = self._compartment_cutter(
-                        comp_w,
-                        comp_d,
-                        comp_h,
-                        tab_resolved,
-                        is_front,
-                        is_back,
-                        is_left,
-                        is_right,
-                    )
-
-                    # Position: centered at (cx, cy), floor at floor_z + floor_thickness
-                    cutter_z = floor_z + s.FLOOR_THICKNESS
-                    body = body - cutter.translate([cx, cy, cutter_z])
+            if self.compartments is not None:
+                body = self._cut_custom_compartments(
+                    body, comp_h, d_magic, gx, gy, cell, cutter_z
+                )
+            else:
+                body = self._cut_grid_compartments(
+                    body, comp_h, d_magic, gx, gy, cell, cutter_z
+                )
 
         elif self.solid and self.solid_ratio < 1.0:
             # Partially filled solid: cut out the empty portion at the top

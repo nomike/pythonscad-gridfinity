@@ -37,6 +37,8 @@ Gridfinity objects directly from Python scripts inside PythonSCAD.
 - Configurable grid size (X, Y) and height (in Gridfinity units, internal mm,
   or external mm).
 - Equal compartments via `div_x` / `div_y` dividers.
+- Custom compartment layouts with arbitrary placement and per-compartment
+  scoop / tab control via the `Compartment` class.
 - Finger scoops (adjustable weight 0--1).
 - Label tabs (full, auto, left, center, right, or none).
 - Stacking lip (normal, reduced, or none).
@@ -166,6 +168,23 @@ b = GridfinityBin(
 b.render().color("Tomato").show()
 ```
 
+### Custom compartment layout (3 x 2, 6U)
+
+```python
+from pythonscad_gridfinity import GridfinityBin, Compartment, HoleOptions
+
+b = GridfinityBin(
+    3, 2, 6,
+    compartments=[
+        Compartment(0, 0, 2, 2, scoop=1.0, tab_style="left"),
+        Compartment(2, 0, 1, 1, scoop=0.5, tab_style="right"),
+        Compartment(2, 1, 1, 1, scoop=0.0, tab_style="none"),
+    ],
+    hole_options=HoleOptions(magnet_hole=True),
+)
+b.render().color("CadetBlue").show()
+```
+
 ## Baseplate styles
 
 | Style | Description |
@@ -268,10 +287,27 @@ GridfinityBin(
     height_mode="units",    # One of: units, mm_internal, mm_external
     solid=False,            # Fill the interior (no compartments)
     solid_ratio=1.0,        # Fill fraction when solid (0.0--1.0)
+    compartments=None,      # List of Compartment objects (overrides div_x/div_y)
 )
 ```
 
 Call `.render()` to get a PythonSCAD 3D object, then `.show()` or `.export()`.
+
+### `Compartment`
+
+Defines a single compartment in a custom layout. Positions and sizes are in
+fractional grid units relative to the bin's `grid_x` / `grid_y`.
+
+```python
+Compartment(
+    x,                      # Grid X position of left edge
+    y,                      # Grid Y position of front edge
+    w,                      # Grid width (X)
+    h,                      # Grid depth (Y)
+    scoop=None,             # Scoop weight 0.0--1.0 (None inherits from bin)
+    tab_style=None,         # Tab style (None inherits from bin)
+)
+```
 
 ### `HoleOptions`
 

@@ -13,7 +13,7 @@ fn = 64
 # Add the parent directory so the package can be found
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(modelpath()))))
 
-from pythonscad_gridfinity import GridfinityBin, HoleOptions
+from pythonscad_gridfinity import GridfinityBin, Compartment, HoleOptions
 
 # --- Example 1: Simple 2x1 bin, plain magnet holes (glued-in) ---
 bin_simple = GridfinityBin(
@@ -81,3 +81,16 @@ bin_tabs.render().color("Peru").translate([0, -160, 0]).show()
 # --- Example 6: 1x1 solid bin (no interior, no holes) ---
 bin_solid = GridfinityBin(1, 1, 6, solid=True)
 bin_solid.render().color("MediumOrchid").translate([300, 0, 0]).show()
+
+# --- Example 7: 3x2 bin with custom compartment layout ---
+# One large compartment on the left, two stacked on the right.
+bin_custom = GridfinityBin(
+    3, 2, 6,
+    compartments=[
+        Compartment(0, 0, 2, 2, scoop=1.0, tab_style="left"),
+        Compartment(2, 0, 1, 1, scoop=0.5, tab_style="right"),
+        Compartment(2, 1, 1, 1, scoop=0.0, tab_style="none"),
+    ],
+    hole_options=HoleOptions(magnet_hole=True),
+)
+bin_custom.render().color("CadetBlue").translate([300, -80, 0]).show()
