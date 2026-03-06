@@ -131,3 +131,23 @@ bin_cyl = GridfinityBin(
     cylinder_chamfer=0.5,
 )
 bin_cyl.render().color("Sienna").translate([0, -320, 0]).show()
+
+# --- Example 12: 3x2 bin with z-snap and only-corners holes ---
+bin_zsnap = GridfinityBin(
+    3, 2, 5,
+    div_x=3, div_y=2,
+    enable_zsnap=True,
+    only_corners=True,
+    hole_options=HoleOptions(magnet_hole=True),
+)
+bin_zsnap.render().color("RoyalBlue").translate([150, -320, 0]).show()
+
+# --- Example 13: 3x1 bin with depth override and top-left tab only ---
+bin_depth = GridfinityBin(
+    3, 1, 6,
+    div_x=3,
+    depth=20.0,
+    place_tab="top_left",
+    tab_style="full",
+)
+bin_depth.render().color("Coral").translate([300, -320, 0]).show()

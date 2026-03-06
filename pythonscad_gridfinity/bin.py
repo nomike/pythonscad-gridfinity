@@ -132,7 +132,17 @@ class GridfinityBin:
         cylinder_diameter: Diameter of cylindrical cutouts in mm.
         cylinder_chamfer: Chamfer radius around the top rim of each
             cylindrical cutout in mm.
+        enable_zsnap: If True, snap the total height to the nearest
+            7 mm increment (Gridfinity unit boundary).
+        only_corners: If True, place magnet/screw holes only at the
+            four outer corners of the bin instead of at every grid cell.
+        depth: Override compartment depth in mm.  0 means use the
+            default (full interior height).
+        place_tab: ``"everywhere"`` puts tabs on every compartment;
+            ``"top_left"`` only on the top-left compartment.
     """
+
+    PLACE_TAB_OPTIONS = ("everywhere", "top_left")
 
     def __init__(
         self,
@@ -157,6 +167,10 @@ class GridfinityBin:
         cut_cylinders=False,
         cylinder_diameter=10.0,
         cylinder_chamfer=0.5,
+        enable_zsnap=False,
+        only_corners=False,
+        depth=0,
+        place_tab="everywhere",
     ):
         self.spec = spec or GridfinitySpec()
         self.grid_x = grid_x
@@ -178,6 +192,10 @@ class GridfinityBin:
         self.cut_cylinders = cut_cylinders
         self.cylinder_diameter = float(cylinder_diameter)
         self.cylinder_chamfer = float(cylinder_chamfer)
+        self.enable_zsnap = enable_zsnap
+        self.only_corners = only_corners
+        self.depth = float(depth)
+        self.place_tab = place_tab
 
         if tab_style not in TAB_STYLES:
             raise ValueError(
@@ -191,6 +209,11 @@ class GridfinityBin:
             raise ValueError(
                 f"Unknown height_mode '{height_mode}'. Must be one of {HEIGHT_MODES}"
             )
+        if place_tab not in self.PLACE_TAB_OPTIONS:
+            raise ValueError(
+                f"Unknown place_tab '{place_tab}'. "
+                f"Must be one of {self.PLACE_TAB_OPTIONS}"
+            )
 
     # ------------------------------------------------------------------
     # Height calculations
@@ -201,6 +224,11 @@ class GridfinityBin:
         s = self.spec
         if self.height_mode == "units":
             h = self.height_u * s.HEIGHT_UNIT
+            if self.enable_zsnap:
+                total = h + s.BASE_HEIGHT
+                if total % 7 != 0:
+                    total = total + 7 - (total % 7)
+                h = total - s.BASE_HEIGHT
             if self.lip_style in ("reduced", "subtractive"):
                 h -= s.STACKING_LIP_HEIGHT
             return h
@@ -739,6 +767,8 @@ class GridfinityBin:
         s = self.spec
         nx, ny = self.div_x, self.div_y
 
+        effective_h = self.depth if self.depth > 0 else comp_h
+
         for ix in range(nx):
             for iy in range(ny):
                 fx = ix / nx
@@ -757,7 +787,11 @@ class GridfinityBin:
                 is_left = ix == 0
                 is_right = ix == nx - 1
 
-                if self.tab_style == "auto":
+                # Resolve tab placement
+                is_top_left = is_back and is_left
+                if self.place_tab == "top_left" and not is_top_left:
+                    tab_resolved = "none"
+                elif self.tab_style == "auto":
                     if is_left:
                         tab_resolved = "left"
                     elif is_right:
@@ -768,10 +802,16 @@ class GridfinityBin:
                     tab_resolved = self.tab_style
 
                 cutter = self._compartment_cutter(
-                    comp_w, comp_d, comp_h,
+                    comp_w, comp_d, effective_h,
                     tab_resolved, is_front, is_back, is_left, is_right,
                 )
-                body = body - cutter.translate([cx, cy, cutter_z])
+                # When depth is overridden, position the cutter so the top
+                # aligns with the wall top
+                if self.depth > 0 and self.depth < comp_h:
+                    z_off = cutter_z + (comp_h - self.depth)
+                else:
+                    z_off = cutter_z
+                body = body - cutter.translate([cx, cy, z_off])
 
         return body
 
@@ -920,12 +960,13 @@ class GridfinityBin:
         if self.hole_options and self.hole_options.has_any_hole:
             hole_obj = block_base_hole(self.hole_options, spec=s)
             if hole_obj is not None:
-                if self.half_grid:
-                    # Half-grid bins only get holes at the four outer corners
+                corners_only = self.only_corners or self.half_grid
+                if corners_only:
                     d = s.HOLE_FROM_CENTER
+                    full_cell = s.GRID_SIZE
                     outer_half = [
-                        self.grid_x * cell / 2 - s.GRID_SIZE / 2,
-                        self.grid_y * cell / 2 - s.GRID_SIZE / 2,
+                        self.grid_x * cell / 2 - full_cell / 2,
+                        self.grid_y * cell / 2 - full_cell / 2,
                     ]
                     for sx in (-1, 1):
                         for sy in (-1, 1):

@@ -45,6 +45,10 @@ Gridfinity objects directly from Python scripts inside PythonSCAD.
 - Lite bins with hollow shell bases for faster printing and less material.
 - Half-grid bins with 21 mm base units (half the standard 42 mm).
 - Cylindrical cutouts for tool holders (chamfered cylinder holes).
+- Z-snap to round height to the nearest 7 mm increment.
+- Only-corners hole placement to save print time.
+- Compartment depth override.
+- Tab placement control (everywhere or top-left only).
 - Solid bin option with configurable fill ratio.
 - Bottom magnet/screw holes (same options as baseplates).
 - Interior edge fillets using PythonSCAD's native `.fillet()`.
@@ -330,6 +334,10 @@ GridfinityBin(
     cut_cylinders=False,    # Cylindrical cutouts instead of compartments
     cylinder_diameter=10.0, # Diameter of cylindrical cutouts (mm)
     cylinder_chamfer=0.5,   # Chamfer radius around top rim (mm)
+    enable_zsnap=False,     # Snap height to nearest 7 mm increment
+    only_corners=False,     # Holes at corners only (saves print time)
+    depth=0,                # Override compartment depth in mm (0 = full)
+    place_tab="everywhere", # "everywhere" or "top_left"
 )
 ```
 
