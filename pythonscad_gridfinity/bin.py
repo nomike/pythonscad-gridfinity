@@ -123,6 +123,9 @@ class GridfinityBin:
             prints faster.
         base_thickness: Bottom layer thickness in mm for lite bins
             (default 1.0).  Ignored when *lite* is False.
+        half_grid: If True, use half-size (21 mm) grid bases instead of
+            the standard 42 mm.  Implies ``only_corners`` for hole
+            placement.
     """
 
     def __init__(
@@ -144,6 +147,7 @@ class GridfinityBin:
         compartments=None,
         lite=False,
         base_thickness=1.0,
+        half_grid=False,
     ):
         self.spec = spec or GridfinitySpec()
         self.grid_x = grid_x
@@ -161,6 +165,7 @@ class GridfinityBin:
         self.compartments = compartments
         self.lite = lite
         self.base_thickness = max(0.0, float(base_thickness))
+        self.half_grid = half_grid
 
         if tab_style not in TAB_STYLES:
             raise ValueError(
@@ -201,6 +206,16 @@ class GridfinityBin:
         return s.BASE_HEIGHT + wall_h + lip_h
 
     # ------------------------------------------------------------------
+    # Grid cell size
+    # ------------------------------------------------------------------
+
+    @property
+    def _cell_size(self):
+        """Effective grid cell size in mm (42 or 21 for half_grid)."""
+        s = self.spec
+        return s.GRID_SIZE / (2 if self.half_grid else 1)
+
+    # ------------------------------------------------------------------
     # Outer dimensions
     # ------------------------------------------------------------------
 
@@ -211,9 +226,10 @@ class GridfinityBin:
             [width, depth] in mm.
         """
         s = self.spec
+        cell = self._cell_size
         return [
-            self.grid_x * s.GRID_SIZE - s.BASE_GAP,
-            self.grid_y * s.GRID_SIZE - s.BASE_GAP,
+            self.grid_x * cell - s.BASE_GAP,
+            self.grid_y * cell - s.BASE_GAP,
         ]
 
     # ------------------------------------------------------------------
@@ -231,11 +247,12 @@ class GridfinityBin:
         """
         s = self.spec
         profile = s.BASE_PROFILE
-        cell = s.GRID_SIZE
+        cell = self._cell_size
 
         # Dimensions at the top of the base profile for one cell
-        top_dim = s.BASE_TOP_DIMENSIONS  # [41.5, 41.5]
-        top_r = s.BASE_TOP_RADIUS  # 3.75
+        half = self.half_grid
+        top_dim = [d / (2 if half else 1) for d in s.BASE_TOP_DIMENSIONS]
+        top_r = s.BASE_TOP_RADIUS
 
         # Inner sweep dimension (top_dim minus the corner diameter)
         inner = [top_dim[0] - 2 * top_r, top_dim[1] - 2 * top_r]
@@ -305,8 +322,9 @@ class GridfinityBin:
             A 3D PythonSCAD object centered in XY, bottom at z=0.
         """
         s = self.spec
-        cell = s.GRID_SIZE
-        top_dim = s.BASE_TOP_DIMENSIONS
+        cell = self._cell_size
+        half = self.half_grid
+        top_dim = [d / (2 if half else 1) for d in s.BASE_TOP_DIMENSIONS]
         top_r = s.BASE_TOP_RADIUS
         wall_t = s.WALL_THICKNESS
         bt = min(self.base_thickness, s.BASE_PROFILE_HEIGHT)
@@ -797,7 +815,7 @@ class GridfinityBin:
         """
         s = self.spec
         tol = s.TOLERANCE
-        cell = s.GRID_SIZE
+        cell = self._cell_size
         outer = self._outer_dimensions()
         wall_h = self._wall_height_mm()
         wall_top_z = s.BASE_HEIGHT + wall_h
@@ -864,10 +882,25 @@ class GridfinityBin:
         if self.hole_options and self.hole_options.has_any_hole:
             hole_obj = block_base_hole(self.hole_options, spec=s)
             if hole_obj is not None:
-                for cx, cy in grid_positions(
-                    [self.grid_x, self.grid_y], cell, center=True
-                ):
-                    holes = hole_pattern(hole_obj, spec=s).translate([cx, cy, 0])
-                    result = result - holes
+                if self.half_grid:
+                    # Half-grid bins only get holes at the four outer corners
+                    d = s.HOLE_FROM_CENTER
+                    outer_half = [
+                        self.grid_x * cell / 2 - s.GRID_SIZE / 2,
+                        self.grid_y * cell / 2 - s.GRID_SIZE / 2,
+                    ]
+                    for sx in (-1, 1):
+                        for sy in (-1, 1):
+                            hx = sx * (outer_half[0] + d)
+                            hy = sy * (outer_half[1] + d)
+                            result = result - hole_obj.translate([hx, hy, 0])
+                else:
+                    for cx, cy in grid_positions(
+                        [self.grid_x, self.grid_y], cell, center=True
+                    ):
+                        holes = hole_pattern(hole_obj, spec=s).translate(
+                            [cx, cy, 0]
+                        )
+                        result = result - holes
 
         return result

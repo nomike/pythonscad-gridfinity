@@ -43,6 +43,7 @@ Gridfinity objects directly from Python scripts inside PythonSCAD.
 - Label tabs (full, auto, left, center, right, or none).
 - Stacking lip (normal, reduced, or none).
 - Lite bins with hollow shell bases for faster printing and less material.
+- Half-grid bins with 21 mm base units (half the standard 42 mm).
 - Solid bin option with configurable fill ratio.
 - Bottom magnet/screw holes (same options as baseplates).
 - Interior edge fillets using PythonSCAD's native `.fillet()`.
@@ -307,6 +308,7 @@ GridfinityBin(
     compartments=None,      # List of Compartment objects (overrides div_x/div_y)
     lite=False,             # Hollow shell base for faster printing
     base_thickness=1.0,     # Bottom thickness in mm (lite bins only)
+    half_grid=False,        # Use 21 mm (half-size) bases; implies only_corners holes
 )
 ```
 

@@ -112,3 +112,12 @@ bin_lite_sub = GridfinityBin(
     lip_style="subtractive",
 )
 bin_lite_sub.render().color("DarkSalmon").translate([150, -240, 0]).show()
+
+# --- Example 10: 4x4 half-grid bin (21 mm bases) ---
+bin_half = GridfinityBin(
+    4, 4, 4,
+    div_x=2, div_y=2,
+    half_grid=True,
+    hole_options=HoleOptions(magnet_hole=True),
+)
+bin_half.render().color("MediumSeaGreen").translate([300, -240, 0]).show()
