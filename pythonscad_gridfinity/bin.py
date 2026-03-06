@@ -140,6 +140,11 @@ class GridfinityBin:
             default (full interior height).
         place_tab: ``"everywhere"`` puts tabs on every compartment;
             ``"top_left"`` only on the top-left compartment.
+        enable_thumbscrew: If True, add a Gridfinity Refined thumbscrew
+            hole (M15 x 1.5 compatible) in the center of each base
+            unit for secure baseplate attachment.
+        scoop_chamfer: If True, add a 45-degree chamfer at the top edge
+            of the scoop for easier part removal.
     """
 
     PLACE_TAB_OPTIONS = ("everywhere", "top_left")
@@ -171,6 +176,8 @@ class GridfinityBin:
         only_corners=False,
         depth=0,
         place_tab="everywhere",
+        enable_thumbscrew=False,
+        scoop_chamfer=False,
     ):
         self.spec = spec or GridfinitySpec()
         self.grid_x = grid_x
@@ -196,6 +203,8 @@ class GridfinityBin:
         self.only_corners = only_corners
         self.depth = float(depth)
         self.place_tab = place_tab
+        self.enable_thumbscrew = enable_thumbscrew
+        self.scoop_chamfer = scoop_chamfer
 
         if tab_style not in TAB_STYLES:
             raise ValueError(
@@ -629,6 +638,25 @@ class GridfinityBin:
             if scoop_obj is not None:
                 cutter = cutter | scoop_obj
 
+        # ---- Scoop chamfer ----
+        if self.scoop_chamfer and self.scoop > 0 and is_front:
+            scoop_r = max(self.scoop * comp_h / 2 - s.FILLET_RADIUS, 0)
+            if scoop_r >= 0.01:
+                chamfer_depth = min(scoop_r * 0.3, 2.0)
+                chamfer_block = cube(
+                    [comp_w - 2 * s.FILLET_RADIUS, chamfer_depth * 2, chamfer_depth * 2],
+                    center=True,
+                ).rotz(0).translate(
+                    [0, -comp_d / 2 - chamfer_depth, comp_h + chamfer_depth]
+                ).rotx(-45).translate(
+                    [0, -comp_d / 2, comp_h]
+                )
+                clip = cube(
+                    [comp_w, comp_d + 2, comp_h * 2],
+                    center=True,
+                ).up(comp_h)
+                cutter = cutter | (chamfer_block & clip)
+
         # ---- Tab ----
         # The tab is SUBTRACTED from the cutter: where the tab shape
         # overlaps, the cutter does not cut, leaving bin material that
@@ -757,6 +785,59 @@ class GridfinityBin:
         tab_3d = tab_3d.translate([x_offset, comp_d / 2, 0])
 
         return tab_3d
+
+    # ------------------------------------------------------------------
+    # Thumbscrew hole
+    # ------------------------------------------------------------------
+
+    def _build_thumbscrew_hole(self):
+        """Build a simplified M15x1.5 thumbscrew hole for one grid cell.
+
+        Creates a threaded-style hole compatible with Gridfinity Refined
+        thumbscrews.  Uses a helical approximation with triangular
+        thread profile rather than a full ISO thread library.
+
+        Returns:
+            A 3D PythonSCAD object centered at the origin.
+        """
+        s = self.spec
+        d = s.THUMBSCREW_DIAMETER
+        pitch = s.THUMBSCREW_PITCH
+        h = s.THUMBSCREW_HEIGHT
+
+        # Simplified thread: core cylinder + helical groove approximation
+        # The minor diameter is approximately d - 1.0825 * pitch
+        minor_d = d - 1.0825 * pitch
+        core = cylinder(h=h, d=minor_d, fn=48)
+
+        # Thread profile: triangular teeth cut from the outer cylinder
+        n_turns = int(h / pitch) + 1
+        thread_depth = (d - minor_d) / 2
+        fn_thread = 48
+
+        outer = cylinder(h=h, d=d, fn=fn_thread)
+
+        # Create helical grooves by subtracting angled ring segments
+        grooves = None
+        for i in range(n_turns * fn_thread):
+            angle = i * 360.0 / fn_thread
+            z = (i / fn_thread) * pitch
+            if z > h:
+                break
+            seg_h = pitch * 0.4
+            seg = (
+                cube([thread_depth + 0.1, 0.3, seg_h], center=True)
+                .translate([d / 2 - thread_depth / 2, 0, z])
+                .rotz(angle)
+            )
+            grooves = seg if grooves is None else (grooves | seg)
+
+        if grooves is not None:
+            hole = outer - grooves
+        else:
+            hole = outer
+
+        return hole
 
     # ------------------------------------------------------------------
     # Compartment layout helpers
@@ -981,5 +1062,13 @@ class GridfinityBin:
                             [cx, cy, 0]
                         )
                         result = result - holes
+
+        # ---- 7. Subtract thumbscrew holes ----
+        if self.enable_thumbscrew:
+            ts_hole = self._build_thumbscrew_hole()
+            for cx, cy in grid_positions(
+                [self.grid_x, self.grid_y], cell, center=True
+            ):
+                result = result - ts_hole.translate([cx, cy, 0])
 
         return result

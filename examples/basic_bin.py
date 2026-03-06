@@ -151,3 +151,13 @@ bin_depth = GridfinityBin(
     tab_style="full",
 )
 bin_depth.render().color("Coral").translate([300, -320, 0]).show()
+
+# --- Example 14: 2x1 bin with thumbscrew holes and scoop chamfer ---
+bin_thumb = GridfinityBin(
+    2, 1, 6,
+    scoop=1.0,
+    enable_thumbscrew=True,
+    scoop_chamfer=True,
+    hole_options=HoleOptions(magnet_hole=True),
+)
+bin_thumb.render().color("Teal").translate([0, -400, 0]).show()

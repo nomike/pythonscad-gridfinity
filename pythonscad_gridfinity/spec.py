@@ -156,6 +156,14 @@ class GridfinitySpec:
         BASE_TOP_RADIUS - BASE_PROFILE[1][0] - FIT_CLEARANCE * math.sqrt(2)
     )
 
+    # ------------------------------------------------------------------
+    # Thumbscrew (Gridfinity Refined)
+    # M15 x 1.5 ISO metric compatible hole in center of base
+    # ------------------------------------------------------------------
+    THUMBSCREW_DIAMETER = 15.0
+    THUMBSCREW_PITCH = 1.5
+    THUMBSCREW_HEIGHT = 4.75  # BASE_PROFILE_HEIGHT
+
     # Tab constants
     TAB_WIDTH_NOMINAL = 42.0
     TAB_DEPTH = 15.85

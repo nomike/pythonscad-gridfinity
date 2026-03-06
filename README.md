@@ -49,6 +49,9 @@ Gridfinity objects directly from Python scripts inside PythonSCAD.
 - Only-corners hole placement to save print time.
 - Compartment depth override.
 - Tab placement control (everywhere or top-left only).
+- Gridfinity Refined thumbscrew holes (M15 x 1.5 compatible) for secure
+  baseplate attachment.
+- Scoop chamfer for easier part removal.
 - Solid bin option with configurable fill ratio.
 - Bottom magnet/screw holes (same options as baseplates).
 - Interior edge fillets using PythonSCAD's native `.fillet()`.
@@ -60,6 +63,9 @@ Gridfinity objects directly from Python scripts inside PythonSCAD.
 - Single-wall dividers.
 - Magic slice for slicer compatibility.
 - Base cross pattern for baseplate attachment.
+- Scoop chamfer on the front wall for easy part removal.
+- Lip pinch for added structural strength.
+- Front inset for reinforcement at the scoop area.
 
 ### Hole options
 
@@ -338,6 +344,8 @@ GridfinityBin(
     only_corners=False,     # Holes at corners only (saves print time)
     depth=0,                # Override compartment depth in mm (0 = full)
     place_tab="everywhere", # "everywhere" or "top_left"
+    enable_thumbscrew=False,# M15x1.5 thumbscrew hole in each base unit
+    scoop_chamfer=False,    # 45-degree chamfer at top of scoop
 )
 ```
 
@@ -356,6 +364,9 @@ GridfinityVaseBin(
     enable_lip=True,        # Include stacking lip
     enable_holes=True,      # Magnet holes in the base
     enable_zsnap=False,     # Snap height to nearest 7 mm increment
+    enable_scoop_chamfer=True,  # Front wall chamfer for easy part removal
+    enable_pinch=True,      # Pinch lip for structural strength
+    enable_front_inset=True,# Front reinforcement when scoop is present
 )
 ```
 

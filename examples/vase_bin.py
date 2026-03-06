@@ -46,3 +46,22 @@ vase_noholes = GridfinityVaseBin(
     layer_height=0.2,
 )
 vase_noholes.render().color("MediumOrchid").translate([150, -120, 0]).show()
+
+# --- Example 5: 2x1 vase bin with all refinements ---
+vase_full = GridfinityVaseBin(
+    2, 1, 6,
+    n_divx=2,
+    enable_scoop_chamfer=True,
+    enable_pinch=True,
+    enable_front_inset=True,
+)
+vase_full.render().color("Teal").translate([0, -240, 0]).show()
+
+# --- Example 6: 1x1 vase bin without refinements ---
+vase_plain = GridfinityVaseBin(
+    1, 1, 6,
+    enable_scoop_chamfer=False,
+    enable_pinch=False,
+    enable_front_inset=False,
+)
+vase_plain.render().color("SlateBlue").translate([150, -240, 0]).show()

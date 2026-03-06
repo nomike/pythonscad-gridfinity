@@ -44,6 +44,11 @@ class GridfinityVaseBin:
         enable_lip: Include the stacking lip.
         enable_holes: Add magnet holes in the base.
         enable_zsnap: Snap height to nearest 7 mm increment.
+        enable_scoop_chamfer: Add a scoop chamfer on the front wall
+            for easier part removal.
+        enable_pinch: Pinch the top lip for added strength.
+        enable_front_inset: Triangular inset at the front wall for
+            strength when the scoop chamfer is present.
     """
 
     def __init__(
@@ -60,6 +65,9 @@ class GridfinityVaseBin:
         enable_lip=True,
         enable_holes=True,
         enable_zsnap=False,
+        enable_scoop_chamfer=True,
+        enable_pinch=True,
+        enable_front_inset=True,
     ):
         self.spec = spec or GridfinitySpec()
         self.grid_x = grid_x
@@ -72,6 +80,9 @@ class GridfinityVaseBin:
         self.enable_lip = enable_lip
         self.enable_holes = enable_holes
         self.enable_zsnap = enable_zsnap
+        self.enable_scoop_chamfer = enable_scoop_chamfer
+        self.enable_pinch = enable_pinch
+        self.enable_front_inset = enable_front_inset
 
     # ------------------------------------------------------------------
     # Height
@@ -338,6 +349,134 @@ class GridfinityVaseBin:
         return pattern
 
     # ------------------------------------------------------------------
+    # Scoop chamfer
+    # ------------------------------------------------------------------
+
+    def _build_scoop_chamfer(self):
+        """Build a chamfered slope on the front wall for easy part removal.
+
+        A triangular ramp along the inside of the front (-Y) wall that
+        creates a smooth transition from the floor to the wall.
+        """
+        s = self.spec
+        cell = s.GRID_SIZE
+        wall_t = 2 * self.nozzle
+        wall_h = self._wall_height()
+        d_bottom = self.layer_height * self.bottom_layers
+        outer = [
+            self.grid_x * cell - s.BASE_GAP,
+            self.grid_y * cell - s.BASE_GAP,
+        ]
+
+        f2c = math.sqrt(2) * (math.sqrt(2) - 1)
+        d_wall2 = s.BASE_TOP_RADIUS - s.BASE_PROFILE[1][0] - s.FIT_CLEARANCE * math.sqrt(2)
+        ramp_depth = f2c * (cell * ((wall_h - 2) / 7 + 1) / 12 - s.FILLET_RADIUS) + d_wall2
+
+        if ramp_depth < 0.01:
+            return None
+
+        ramp_2d = polygon([
+            [0, 0],
+            [ramp_depth, ramp_depth],
+            [ramp_depth, ramp_depth + 0.6 / math.sqrt(2)],
+            [-0.6 / math.sqrt(2), 0],
+        ])
+
+        ramp = ramp_2d.linear_extrude(height=outer[0] - 2 * wall_t, center=True).rotx(90).rotz(90)
+        ramp = ramp.translate([0, outer[1] / 2 - ramp_depth, d_bottom])
+
+        # Clip to bin interior
+        clip = rounded_square_3d(
+            [outer[0] - wall_t, outer[1] - wall_t],
+            s.BASE_TOP_RADIUS - wall_t / 2,
+            wall_h * 2,
+            center_xy=True,
+        ).up(s.BASE_HEIGHT)
+
+        return ramp & clip
+
+    # ------------------------------------------------------------------
+    # Pinch
+    # ------------------------------------------------------------------
+
+    def _build_pinch(self):
+        """Pinch the top lip inward for added structural strength.
+
+        Creates a thin wall inset from the main wall that reinforces
+        the stacking lip junction.
+        """
+        s = self.spec
+        cell = s.GRID_SIZE
+        wall_t = 2 * self.nozzle
+        wall_h = self._wall_height()
+        outer = [
+            self.grid_x * cell - s.BASE_GAP,
+            self.grid_y * cell - s.BASE_GAP,
+        ]
+        r = s.BASE_TOP_RADIUS
+
+        pinch_inset = wall_t * 2 + s.TOLERANCE * 2
+        pinch_h = wall_h * 0.15
+
+        outer_shell = rounded_square_3d(
+            [outer[0] - pinch_inset, outer[1] - pinch_inset],
+            max(r - pinch_inset / 2, 0.01),
+            pinch_h,
+            center_xy=True,
+        )
+        inner_shell = rounded_square_3d(
+            [outer[0] - pinch_inset - 2 * wall_t,
+             outer[1] - pinch_inset - 2 * wall_t],
+            max(r - pinch_inset / 2 - wall_t, 0.01),
+            pinch_h + 0.01,
+            center_xy=True,
+        )
+
+        return (outer_shell - inner_shell).up(
+            s.BASE_HEIGHT + wall_h - pinch_h
+        )
+
+    # ------------------------------------------------------------------
+    # Front inset
+    # ------------------------------------------------------------------
+
+    def _build_front_inset(self):
+        """Triangular inset on the front wall for structural reinforcement.
+
+        Adds material at the front-top of the bin where the scoop
+        reduces wall thickness, improving rigidity.
+        """
+        s = self.spec
+        cell = s.GRID_SIZE
+        wall_t = 2 * self.nozzle
+        wall_h = self._wall_height()
+        outer = [
+            self.grid_x * cell - s.BASE_GAP,
+            self.grid_y * cell - s.BASE_GAP,
+        ]
+
+        inset_depth = min(wall_h / 2.1, outer[1] / 4)
+        inset_h = wall_h * 0.3
+
+        if inset_depth < 1 or inset_h < 1:
+            return None
+
+        tri = polygon([
+            [0, 0],
+            [inset_depth, 0],
+            [0, inset_h],
+        ])
+
+        inset = tri.linear_extrude(height=wall_t, center=True).rotx(90).rotz(90)
+        inset = inset.translate([
+            0,
+            outer[1] / 2 - wall_t,
+            s.BASE_HEIGHT + wall_h - inset_h,
+        ])
+
+        return inset
+
+    # ------------------------------------------------------------------
     # Render
     # ------------------------------------------------------------------
 
@@ -358,6 +497,20 @@ class GridfinityVaseBin:
         dividers = self._build_dividers()
         if dividers is not None:
             result = result | dividers
+
+        if self.enable_scoop_chamfer:
+            scoop = self._build_scoop_chamfer()
+            if scoop is not None:
+                result = result | scoop
+
+        if self.enable_pinch and self.enable_lip:
+            pinch = self._build_pinch()
+            result = result - pinch
+
+        if self.enable_front_inset and self.enable_scoop_chamfer:
+            inset = self._build_front_inset()
+            if inset is not None:
+                result = result | inset
 
         cross = self._base_cross_pattern()
         if cross is not None:
