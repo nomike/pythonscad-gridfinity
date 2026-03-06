@@ -44,6 +44,7 @@ from .helpers import (
     rounded_square,
     rounded_square_3d,
     grid_positions,
+    cut_chamfered_cylinder,
 )
 
 
@@ -126,6 +127,11 @@ class GridfinityBin:
         half_grid: If True, use half-size (21 mm) grid bases instead of
             the standard 42 mm.  Implies ``only_corners`` for hole
             placement.
+        cut_cylinders: If True, use cylindrical cutouts instead of
+            rectangular compartments.  Useful for tool holders.
+        cylinder_diameter: Diameter of cylindrical cutouts in mm.
+        cylinder_chamfer: Chamfer radius around the top rim of each
+            cylindrical cutout in mm.
     """
 
     def __init__(
@@ -148,6 +154,9 @@ class GridfinityBin:
         lite=False,
         base_thickness=1.0,
         half_grid=False,
+        cut_cylinders=False,
+        cylinder_diameter=10.0,
+        cylinder_chamfer=0.5,
     ):
         self.spec = spec or GridfinitySpec()
         self.grid_x = grid_x
@@ -166,6 +175,9 @@ class GridfinityBin:
         self.lite = lite
         self.base_thickness = max(0.0, float(base_thickness))
         self.half_grid = half_grid
+        self.cut_cylinders = cut_cylinders
+        self.cylinder_diameter = float(cylinder_diameter)
+        self.cylinder_chamfer = float(cylinder_chamfer)
 
         if tab_style not in TAB_STYLES:
             raise ValueError(
@@ -763,6 +775,28 @@ class GridfinityBin:
 
         return body
 
+    def _cut_cylinder_compartments(self, body, comp_h, d_magic, gx, gy, cell, cutter_z):
+        """Cut cylindrical holes at each grid division center."""
+        s = self.spec
+        nx, ny = self.div_x, self.div_y
+        cyl_r = self.cylinder_diameter / 2
+        cyl_chamfer = self.cylinder_chamfer
+
+        for ix in range(nx):
+            for iy in range(ny):
+                fx = ix / nx
+                fy = iy / ny
+                fw = 1.0 / nx
+                fh = 1.0 / ny
+
+                cx = (fx + fw / 2 - 0.5) * (gx * cell + d_magic)
+                cy = (fy + fh / 2 - 0.5) * (gy * cell + d_magic)
+
+                cyl = cut_chamfered_cylinder(cyl_r, comp_h, cyl_chamfer)
+                body = body - cyl.translate([cx, cy, cutter_z + comp_h])
+
+        return body
+
     def _cut_custom_compartments(self, body, comp_h, d_magic, gx, gy, cell, cutter_z):
         """Cut compartments from a list of Compartment objects."""
         s = self.spec
@@ -846,7 +880,11 @@ class GridfinityBin:
             gx, gy = self.grid_x, self.grid_y
             cutter_z = floor_z + s.FLOOR_THICKNESS
 
-            if self.compartments is not None:
+            if self.cut_cylinders:
+                body = self._cut_cylinder_compartments(
+                    body, comp_h, d_magic, gx, gy, cell, cutter_z
+                )
+            elif self.compartments is not None:
                 body = self._cut_custom_compartments(
                     body, comp_h, d_magic, gx, gy, cell, cutter_z
                 )

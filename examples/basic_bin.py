@@ -121,3 +121,13 @@ bin_half = GridfinityBin(
     hole_options=HoleOptions(magnet_hole=True),
 )
 bin_half.render().color("MediumSeaGreen").translate([300, -240, 0]).show()
+
+# --- Example 11: 3x2 bin with cylindrical cutouts (tool holder) ---
+bin_cyl = GridfinityBin(
+    3, 2, 6,
+    div_x=6, div_y=4,
+    cut_cylinders=True,
+    cylinder_diameter=10.0,
+    cylinder_chamfer=0.5,
+)
+bin_cyl.render().color("Sienna").translate([0, -320, 0]).show()

@@ -136,6 +136,35 @@ def cone(bottom_radius, angle_deg, max_height=0):
         return cylinder(h=max_height, r1=bottom_radius, r2=top_radius)
 
 
+def cut_chamfered_cylinder(radius, depth, chamfer_radius=0, cut_lip=False):
+    """Create a chamfered cylindrical cutout for subtracting from a bin.
+
+    The cylinder extends downward from z=0.  A 45-degree chamfer ring at
+    the top aids part removal.  When *cut_lip* is True an extra tall
+    cylinder at the chamfered radius extends upward to also cut through
+    the stacking lip.
+
+    Args:
+        radius: Cylinder radius.
+        depth: How deep the cylinder extends below z=0.
+        chamfer_radius: Extra radius for the 45-degree chamfer (0 = none).
+        cut_lip: If True, add an upward cylinder that cuts the lip.
+
+    Returns:
+        A 3D PythonSCAD object centered at the origin.
+    """
+    outer_radius = radius + chamfer_radius
+    body = cylinder(h=depth, r=radius).down(depth)
+
+    if cut_lip:
+        body = body | cylinder(h=1000, r=outer_radius)
+
+    if chamfer_radius > 0:
+        body = body | cone(outer_radius, 45, depth).mirror([0, 0, 1])
+
+    return body
+
+
 def grid_positions(grid_size, spacing, center=True):
     """Yield (x, y) positions for a 2D grid.
 

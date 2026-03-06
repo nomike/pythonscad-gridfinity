@@ -44,6 +44,7 @@ Gridfinity objects directly from Python scripts inside PythonSCAD.
 - Stacking lip (normal, reduced, or none).
 - Lite bins with hollow shell bases for faster printing and less material.
 - Half-grid bins with 21 mm base units (half the standard 42 mm).
+- Cylindrical cutouts for tool holders (chamfered cylinder holes).
 - Solid bin option with configurable fill ratio.
 - Bottom magnet/screw holes (same options as baseplates).
 - Interior edge fillets using PythonSCAD's native `.fillet()`.
@@ -309,6 +310,9 @@ GridfinityBin(
     lite=False,             # Hollow shell base for faster printing
     base_thickness=1.0,     # Bottom thickness in mm (lite bins only)
     half_grid=False,        # Use 21 mm (half-size) bases; implies only_corners holes
+    cut_cylinders=False,    # Cylindrical cutouts instead of compartments
+    cylinder_diameter=10.0, # Diameter of cylindrical cutouts (mm)
+    cylinder_chamfer=0.5,   # Chamfer radius around top rim (mm)
 )
 ```
 
@@ -342,6 +346,8 @@ compose custom objects:
 - `block_base_hole(options, spec)` -- single combined magnet/screw hole
 - `hole_pattern(obj, spec)` -- place an object at the four hole positions
 - `refined_hole(spec)` -- Gridfinity Refined magnet hole geometry
+- `cut_chamfered_cylinder(radius, depth, chamfer_radius, cut_lip)` --
+  chamfered cylindrical cutout for tool holders
 
 ## Project structure
 
