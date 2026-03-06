@@ -49,6 +49,14 @@ Gridfinity objects directly from Python scripts inside PythonSCAD.
 - Bottom magnet/screw holes (same options as baseplates).
 - Interior edge fillets using PythonSCAD's native `.fillet()`.
 
+### Spiral / vase-mode bins
+
+- Bins designed for spiral (vase) mode printing with single-wall extrusions.
+- Configurable nozzle width and layer height.
+- Single-wall dividers.
+- Magic slice for slicer compatibility.
+- Base cross pattern for baseplate attachment.
+
 ### Hole options
 
 - Standard magnet holes
@@ -203,6 +211,15 @@ b = GridfinityBin(
 b.render().color("LightCoral").show()
 ```
 
+### Spiral/vase-mode bin (2 x 1, 6U)
+
+```python
+from pythonscad_gridfinity import GridfinityVaseBin
+
+v = GridfinityVaseBin(2, 1, 6, n_divx=2, nozzle=0.4)
+v.render().color("Tomato").show()
+```
+
 ## Baseplate styles
 
 | Style | Description |
@@ -318,6 +335,24 @@ GridfinityBin(
 
 Call `.render()` to get a PythonSCAD 3D object, then `.show()` or `.export()`.
 
+### `GridfinityVaseBin`
+
+```python
+GridfinityVaseBin(
+    grid_x, grid_y, height_u,
+    spec=None,              # GridfinitySpec instance (default: standard)
+    nozzle=0.6,             # Nozzle width in mm (walls = 2 * nozzle)
+    layer_height=0.35,      # Slicer layer height in mm
+    bottom_layers=3,        # Number of solid bottom layers
+    n_divx=1,               # Number of X compartments (single-wall dividers)
+    enable_lip=True,        # Include stacking lip
+    enable_holes=True,      # Magnet holes in the base
+    enable_zsnap=False,     # Snap height to nearest 7 mm increment
+)
+```
+
+Call `.render()` to get a PythonSCAD 3D object. **Print in spiral/vase mode.**
+
 ### `Compartment`
 
 Defines a single compartment in a custom layout. Positions and sizes are in
@@ -360,9 +395,11 @@ pythonscad-gridfinity/
     holes.py          # HoleOptions and hole geometry builders
     baseplate.py      # GridfinityBaseplate class
     bin.py            # GridfinityBin class
+    vase.py           # GridfinityVaseBin class (spiral/vase mode)
   examples/
     basic_baseplate.py
     basic_bin.py
+    vase_bin.py
   pyproject.toml
   LICENSE
   README.md

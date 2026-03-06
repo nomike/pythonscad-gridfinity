@@ -23,6 +23,7 @@ from .holes import HoleOptions, block_base_hole, hole_pattern, refined_hole
 from .baseplate import GridfinityBaseplate, BASEPLATE_STYLES, SCREW_STYLES
 from .bin import GridfinityBin, Compartment, TAB_STYLES, LIP_STYLES, HEIGHT_MODES
 from .helpers import cut_chamfered_cylinder
+from .vase import GridfinityVaseBin
 
 __all__ = [
     "GridfinitySpec",
@@ -39,4 +40,5 @@ __all__ = [
     "hole_pattern",
     "refined_hole",
     "cut_chamfered_cylinder",
+    "GridfinityVaseBin",
 ]
