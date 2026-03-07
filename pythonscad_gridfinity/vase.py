@@ -517,7 +517,7 @@ class GridfinityVaseBin:
 
         if self.enable_pinch and self.enable_lip:
             pinch = self._build_pinch()
-            result = result - pinch
+            result = result | pinch
 
         if self.enable_front_inset and self.enable_scoop_chamfer:
             inset = self._build_front_inset()
