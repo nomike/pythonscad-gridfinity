@@ -17,6 +17,7 @@ import math
 from openscad import *
 
 from .spec import GridfinitySpec
+from .holes import HoleOptions, block_base_hole, hole_pattern
 from .helpers import (
     rounded_square,
     rounded_square_3d,
@@ -137,15 +138,15 @@ class GridfinityVaseBin:
             bot = r_func(r0v).linear_extrude(height=thin)
             top = r_func(r1v).linear_extrude(height=thin).up(z1)
             sh = hull(bot, top)
-            sh = sh | r_func(r1v).linear_extrude(
-                height=(z2 - z1) + 2 * overlap
-            ).up(z1 - overlap)
+            sh = sh | r_func(r1v).linear_extrude(height=(z2 - z1) + 2 * overlap).up(
+                z1 - overlap
+            )
             bot2 = r_func(r1v).linear_extrude(height=thin).up(z2 - overlap)
             top2 = r_func(r3v).linear_extrude(height=thin).up(z3)
             sh = sh | hull(bot2, top2)
-            sh = sh | r_func(r3v).linear_extrude(
-                height=(z4 - z3) + overlap
-            ).up(z3 - overlap)
+            sh = sh | r_func(r3v).linear_extrude(height=(z4 - z3) + overlap).up(
+                z3 - overlap
+            )
             return sh
 
         outer_cell = make_shell(rr, r0, r1, r3)
@@ -316,10 +317,14 @@ class GridfinityVaseBin:
             self.grid_y * cell - s.BASE_GAP,
         ]
 
-        return cube(
-            [0.005, outer[1], wall_h + s.BASE_HEIGHT - d_bottom],
-            center=True,
-        ).up(d_bottom + (wall_h + s.BASE_HEIGHT - d_bottom) / 2).rotz(90)
+        return (
+            cube(
+                [0.005, outer[1], wall_h + s.BASE_HEIGHT - d_bottom],
+                center=True,
+            )
+            .up(d_bottom + (wall_h + s.BASE_HEIGHT - d_bottom) / 2)
+            .rotz(90)
+        )
 
     # ------------------------------------------------------------------
     # Base cross pattern
@@ -330,11 +335,7 @@ class GridfinityVaseBin:
         s = self.spec
         cell = s.GRID_SIZE
         wall_t = 2 * self.nozzle
-        d_bottom = self.layer_height * self.bottom_layers
         half_cell = cell / 2
-
-        arm = cube([wall_t, cell, d_bottom], center=True).up(d_bottom / 2)
-        cross = arm | arm.rotz(90)
 
         pattern = None
         for cx, cy in grid_positions([self.grid_x, self.grid_y], cell, center=True):
@@ -369,20 +370,30 @@ class GridfinityVaseBin:
         ]
 
         f2c = math.sqrt(2) * (math.sqrt(2) - 1)
-        d_wall2 = s.BASE_TOP_RADIUS - s.BASE_PROFILE[1][0] - s.FIT_CLEARANCE * math.sqrt(2)
-        ramp_depth = f2c * (cell * ((wall_h - 2) / 7 + 1) / 12 - s.FILLET_RADIUS) + d_wall2
+        d_wall2 = (
+            s.BASE_TOP_RADIUS - s.BASE_PROFILE[1][0] - s.FIT_CLEARANCE * math.sqrt(2)
+        )
+        ramp_depth = (
+            f2c * (cell * ((wall_h - 2) / 7 + 1) / 12 - s.FILLET_RADIUS) + d_wall2
+        )
 
         if ramp_depth < 0.01:
             return None
 
-        ramp_2d = polygon([
-            [0, 0],
-            [ramp_depth, ramp_depth],
-            [ramp_depth, ramp_depth + 0.6 / math.sqrt(2)],
-            [-0.6 / math.sqrt(2), 0],
-        ])
+        ramp_2d = polygon(
+            [
+                [0, 0],
+                [ramp_depth, ramp_depth],
+                [ramp_depth, ramp_depth + 0.6 / math.sqrt(2)],
+                [-0.6 / math.sqrt(2), 0],
+            ]
+        )
 
-        ramp = ramp_2d.linear_extrude(height=outer[0] - 2 * wall_t, center=True).rotx(90).rotz(90)
+        ramp = (
+            ramp_2d.linear_extrude(height=outer[0] - 2 * wall_t, center=True)
+            .rotx(90)
+            .rotz(90)
+        )
         ramp = ramp.translate([0, outer[1] / 2 - ramp_depth, d_bottom])
 
         # Clip to bin interior
@@ -425,16 +436,13 @@ class GridfinityVaseBin:
             center_xy=True,
         )
         inner_shell = rounded_square_3d(
-            [outer[0] - pinch_inset - 2 * wall_t,
-             outer[1] - pinch_inset - 2 * wall_t],
+            [outer[0] - pinch_inset - 2 * wall_t, outer[1] - pinch_inset - 2 * wall_t],
             max(r - pinch_inset / 2 - wall_t, 0.01),
             pinch_h + 0.01,
             center_xy=True,
         )
 
-        return (outer_shell - inner_shell).up(
-            s.BASE_HEIGHT + wall_h - pinch_h
-        )
+        return (outer_shell - inner_shell).up(s.BASE_HEIGHT + wall_h - pinch_h)
 
     # ------------------------------------------------------------------
     # Front inset
@@ -461,18 +469,22 @@ class GridfinityVaseBin:
         if inset_depth < 1 or inset_h < 1:
             return None
 
-        tri = polygon([
-            [0, 0],
-            [inset_depth, 0],
-            [0, inset_h],
-        ])
+        tri = polygon(
+            [
+                [0, 0],
+                [inset_depth, 0],
+                [0, inset_h],
+            ]
+        )
 
         inset = tri.linear_extrude(height=wall_t, center=True).rotx(90).rotz(90)
-        inset = inset.translate([
-            0,
-            outer[1] / 2 - wall_t,
-            s.BASE_HEIGHT + wall_h - inset_h,
-        ])
+        inset = inset.translate(
+            [
+                0,
+                outer[1] / 2 - wall_t,
+                s.BASE_HEIGHT + wall_h - inset_h,
+            ]
+        )
 
         return inset
 
@@ -515,6 +527,18 @@ class GridfinityVaseBin:
         cross = self._base_cross_pattern()
         if cross is not None:
             result = result & (result | cross)
+
+        if self.enable_holes:
+            s = self.spec
+            cell = s.GRID_SIZE
+            hole_opts = HoleOptions(magnet_hole=True)
+            hole_obj = block_base_hole(hole_opts, spec=s)
+            if hole_obj is not None:
+                for cx, cy in grid_positions(
+                    [self.grid_x, self.grid_y], cell, center=True
+                ):
+                    holes = hole_pattern(hole_obj, spec=s).translate([cx, cy, 0])
+                    result = result - holes
 
         magic = self._magic_slice()
         result = result - magic
