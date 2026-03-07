@@ -23,7 +23,9 @@ vase_simple.render().color("Tomato").show()
 
 # --- Example 2: 3x1 vase bin with dividers ---
 vase_div = GridfinityVaseBin(
-    3, 1, 6,
+    3,
+    1,
+    6,
     n_divx=3,
     nozzle=0.4,
 )
@@ -31,7 +33,9 @@ vase_div.render().color("SteelBlue").translate([150, 0, 0]).show()
 
 # --- Example 3: 2x2 vase bin, no lip, height snapped ---
 vase_nolip = GridfinityVaseBin(
-    2, 2, 4,
+    2,
+    2,
+    4,
     enable_lip=False,
     enable_zsnap=True,
     bottom_layers=5,
@@ -40,7 +44,9 @@ vase_nolip.render().color("DarkOliveGreen").translate([0, -120, 0]).show()
 
 # --- Example 4: 1x1 vase bin without magnet holes ---
 vase_noholes = GridfinityVaseBin(
-    1, 1, 3,
+    1,
+    1,
+    3,
     enable_holes=False,
     nozzle=0.6,
     layer_height=0.2,
@@ -49,7 +55,9 @@ vase_noholes.render().color("MediumOrchid").translate([150, -120, 0]).show()
 
 # --- Example 5: 2x1 vase bin with all refinements ---
 vase_full = GridfinityVaseBin(
-    2, 1, 6,
+    2,
+    1,
+    6,
     n_divx=2,
     enable_scoop_chamfer=True,
     enable_pinch=True,
@@ -59,7 +67,9 @@ vase_full.render().color("Teal").translate([0, -240, 0]).show()
 
 # --- Example 6: 1x1 vase bin without refinements ---
 vase_plain = GridfinityVaseBin(
-    1, 1, 6,
+    1,
+    1,
+    6,
     enable_scoop_chamfer=False,
     enable_pinch=False,
     enable_front_inset=False,
