@@ -34,7 +34,7 @@ Usage:
 """
 
 import math
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 from openscad import *
 
@@ -86,8 +86,7 @@ class Compartment:
             raise ValueError("Compartment w and h must be positive")
         if self.tab_style is not None and self.tab_style not in TAB_STYLES:
             raise ValueError(
-                f"Unknown tab_style '{self.tab_style}'. "
-                f"Must be one of {TAB_STYLES}"
+                f"Unknown tab_style '{self.tab_style}'. Must be one of {TAB_STYLES}"
             )
 
 
@@ -404,15 +403,15 @@ class GridfinityBin:
         bot = rr(r0).linear_extrude(height=thin)
         top = rr(r1).linear_extrude(height=thin).up(z1)
         outer = hull(bot, top)
-        outer = outer | rr(r1).linear_extrude(
-            height=(z2 - z1) + 2 * overlap
-        ).up(z1 - overlap)
+        outer = outer | rr(r1).linear_extrude(height=(z2 - z1) + 2 * overlap).up(
+            z1 - overlap
+        )
         bot2 = rr(r1).linear_extrude(height=thin).up(z2 - overlap)
         top2 = rr(r3).linear_extrude(height=thin).up(z3)
         outer = outer | hull(bot2, top2)
-        outer = outer | rr(r3).linear_extrude(
-            height=(z4 - z3) + overlap
-        ).up(z3 - overlap)
+        outer = outer | rr(r3).linear_extrude(height=(z4 - z3) + overlap).up(
+            z3 - overlap
+        )
 
         # Inner cavity: shrink radii by wall_thickness
         ir0 = max(r0 - wall_t, 0.01)
@@ -467,9 +466,7 @@ class GridfinityBin:
 
         # Bottom solid layer across all cells
         if bt > 0:
-            bottom_slab = rounded_square_3d(
-                grid_outer, top_r, bt, center_xy=True
-            )
+            bottom_slab = rounded_square_3d(grid_outer, top_r, bt, center_xy=True)
             bridge = bridge | bottom_slab
 
         base = None
@@ -643,13 +640,19 @@ class GridfinityBin:
             scoop_r = max(self.scoop * comp_h / 2 - s.FILLET_RADIUS, 0)
             if scoop_r >= 0.01:
                 chamfer_depth = min(scoop_r * 0.3, 2.0)
-                chamfer_block = cube(
-                    [comp_w - 2 * s.FILLET_RADIUS, chamfer_depth * 2, chamfer_depth * 2],
-                    center=True,
-                ).rotz(0).translate(
-                    [0, -comp_d / 2 - chamfer_depth, comp_h + chamfer_depth]
-                ).rotx(-45).translate(
-                    [0, -comp_d / 2, comp_h]
+                chamfer_block = (
+                    cube(
+                        [
+                            comp_w - 2 * s.FILLET_RADIUS,
+                            chamfer_depth * 2,
+                            chamfer_depth * 2,
+                        ],
+                        center=True,
+                    )
+                    .rotz(0)
+                    .translate([0, -comp_d / 2 - chamfer_depth, comp_h + chamfer_depth])
+                    .rotx(-45)
+                    .translate([0, -comp_d / 2, comp_h])
                 )
                 clip = cube(
                     [comp_w, comp_d + 2, comp_h * 2],
@@ -805,17 +808,12 @@ class GridfinityBin:
         pitch = s.THUMBSCREW_PITCH
         h = s.THUMBSCREW_HEIGHT
 
-        # Simplified thread: core cylinder + helical groove approximation
-        # The minor diameter is approximately d - 1.0825 * pitch
         minor_d = d - 1.0825 * pitch
-        core = cylinder(h=h, d=minor_d, fn=48)
-
-        # Thread profile: triangular teeth cut from the outer cylinder
         n_turns = int(h / pitch) + 1
         thread_depth = (d - minor_d) / 2
-        fn_thread = 48
+        fn_thread = 8
 
-        outer = cylinder(h=h, d=d, fn=fn_thread)
+        outer = cylinder(h=h, d=d, fn=48)
 
         # Create helical grooves by subtracting angled ring segments
         grooves = None
@@ -883,8 +881,14 @@ class GridfinityBin:
                     tab_resolved = self.tab_style
 
                 cutter = self._compartment_cutter(
-                    comp_w, comp_d, effective_h,
-                    tab_resolved, is_front, is_back, is_left, is_right,
+                    comp_w,
+                    comp_d,
+                    effective_h,
+                    tab_resolved,
+                    is_front,
+                    is_back,
+                    is_left,
+                    is_right,
                 )
                 # When depth is overridden, position the cutter so the top
                 # aligns with the wall top
@@ -898,7 +902,6 @@ class GridfinityBin:
 
     def _cut_cylinder_compartments(self, body, comp_h, d_magic, gx, gy, cell, cutter_z):
         """Cut cylindrical holes at each grid division center."""
-        s = self.spec
         nx, ny = self.div_x, self.div_y
         cyl_r = self.cylinder_diameter / 2
         cyl_chamfer = self.cylinder_chamfer
@@ -923,6 +926,7 @@ class GridfinityBin:
         s = self.spec
         total_w = gx * cell + d_magic
         total_d = gy * cell + d_magic
+        effective_h = self.depth if self.depth > 0 else comp_h
 
         for comp in self.compartments:
             comp_w = (comp.w / gx) * total_w - s.DIVIDER_WIDTH
@@ -939,7 +943,10 @@ class GridfinityBin:
             scoop_val = comp.scoop if comp.scoop is not None else self.scoop
             tab = comp.tab_style if comp.tab_style is not None else self.tab_style
 
-            if tab == "auto":
+            is_top_left = is_back and is_left
+            if self.place_tab == "top_left" and not is_top_left:
+                tab = "none"
+            elif tab == "auto":
                 if is_left:
                     tab = "left"
                 elif is_right:
@@ -950,11 +957,22 @@ class GridfinityBin:
             saved_scoop = self.scoop
             self.scoop = max(0.0, min(float(scoop_val), 1.0))
             cutter = self._compartment_cutter(
-                comp_w, comp_d, comp_h,
-                tab, is_front, is_back, is_left, is_right,
+                comp_w,
+                comp_d,
+                effective_h,
+                tab,
+                is_front,
+                is_back,
+                is_left,
+                is_right,
             )
             self.scoop = saved_scoop
-            body = body - cutter.translate([cx, cy, cutter_z])
+
+            if self.depth > 0 and self.depth < comp_h:
+                z_off = cutter_z + (comp_h - self.depth)
+            else:
+                z_off = cutter_z
+            body = body - cutter.translate([cx, cy, z_off])
 
         return body
 
@@ -1058,17 +1076,13 @@ class GridfinityBin:
                     for cx, cy in grid_positions(
                         [self.grid_x, self.grid_y], cell, center=True
                     ):
-                        holes = hole_pattern(hole_obj, spec=s).translate(
-                            [cx, cy, 0]
-                        )
+                        holes = hole_pattern(hole_obj, spec=s).translate([cx, cy, 0])
                         result = result - holes
 
         # ---- 7. Subtract thumbscrew holes ----
         if self.enable_thumbscrew:
             ts_hole = self._build_thumbscrew_hole()
-            for cx, cy in grid_positions(
-                [self.grid_x, self.grid_y], cell, center=True
-            ):
+            for cx, cy in grid_positions([self.grid_x, self.grid_y], cell, center=True):
                 result = result - ts_hole.translate([cx, cy, 0])
 
         return result

@@ -394,7 +394,7 @@ class GridfinityVaseBin:
             .rotx(90)
             .rotz(90)
         )
-        ramp = ramp.translate([0, outer[1] / 2 - ramp_depth, d_bottom])
+        ramp = ramp.rotz(180).translate([0, -(outer[1] / 2 - ramp_depth), d_bottom])
 
         # Clip to bin interior
         clip = rounded_square_3d(
@@ -481,7 +481,7 @@ class GridfinityVaseBin:
         inset = inset.translate(
             [
                 0,
-                outer[1] / 2 - wall_t,
+                -(outer[1] / 2 - wall_t),
                 s.BASE_HEIGHT + wall_h - inset_h,
             ]
         )
@@ -526,7 +526,7 @@ class GridfinityVaseBin:
 
         cross = self._base_cross_pattern()
         if cross is not None:
-            result = result & (result | cross)
+            result = result | cross
 
         if self.enable_holes:
             s = self.spec
