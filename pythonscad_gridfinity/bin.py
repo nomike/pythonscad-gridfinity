@@ -418,25 +418,18 @@ class GridfinityBin:
         ir1 = max(r1 - wall_t, 0.01)
         ir3 = max(r3 - wall_t, 0.01)
 
-        def rr_inner(radius):
-            return rounded_square(
-                [inner[0] + 2 * radius, inner[1] + 2 * radius],
-                max(radius, 0.01),
-                center=True,
-            )
-
-        i_bot = rr_inner(ir0).linear_extrude(height=thin)
-        i_top = rr_inner(ir1).linear_extrude(height=thin).up(z1)
+        i_bot = rr(ir0).linear_extrude(height=thin)
+        i_top = rr(ir1).linear_extrude(height=thin).up(z1)
         cavity = hull(i_bot, i_top)
-        cavity = cavity | rr_inner(ir1).linear_extrude(
-            height=(z2 - z1) + 2 * overlap
-        ).up(z1 - overlap)
-        i_bot2 = rr_inner(ir1).linear_extrude(height=thin).up(z2 - overlap)
-        i_top2 = rr_inner(ir3).linear_extrude(height=thin).up(z3)
+        cavity = cavity | rr(ir1).linear_extrude(height=(z2 - z1) + 2 * overlap).up(
+            z1 - overlap
+        )
+        i_bot2 = rr(ir1).linear_extrude(height=thin).up(z2 - overlap)
+        i_top2 = rr(ir3).linear_extrude(height=thin).up(z3)
         cavity = cavity | hull(i_bot2, i_top2)
-        cavity = cavity | rr_inner(ir3).linear_extrude(
-            height=(z4 - z3) + 2 * overlap
-        ).up(z3 - overlap)
+        cavity = cavity | rr(ir3).linear_extrude(height=(z4 - z3) + 2 * overlap).up(
+            z3 - overlap
+        )
 
         # Cut cavity above bottom_thickness
         cavity = cavity - cube(
@@ -649,8 +642,6 @@ class GridfinityBin:
                         ],
                         center=True,
                     )
-                    .rotz(0)
-                    .translate([0, -comp_d / 2 - chamfer_depth, comp_h + chamfer_depth])
                     .rotx(-45)
                     .translate([0, -comp_d / 2, comp_h])
                 )
@@ -809,13 +800,14 @@ class GridfinityBin:
         h = s.THUMBSCREW_HEIGHT
 
         minor_d = d - 1.0825 * pitch
+        core = cylinder(h=h, d=minor_d, fn=48)
+
         n_turns = int(h / pitch) + 1
         thread_depth = (d - minor_d) / 2
         fn_thread = 8
 
         outer = cylinder(h=h, d=d, fn=48)
 
-        # Create helical grooves by subtracting angled ring segments
         grooves = None
         for i in range(n_turns * fn_thread):
             angle = i * 360.0 / fn_thread
@@ -831,7 +823,7 @@ class GridfinityBin:
             grooves = seg if grooves is None else (grooves | seg)
 
         if grooves is not None:
-            hole = outer - grooves
+            hole = core | (outer - grooves)
         else:
             hole = outer
 
@@ -955,18 +947,20 @@ class GridfinityBin:
                     tab = "center"
 
             saved_scoop = self.scoop
-            self.scoop = max(0.0, min(float(scoop_val), 1.0))
-            cutter = self._compartment_cutter(
-                comp_w,
-                comp_d,
-                effective_h,
-                tab,
-                is_front,
-                is_back,
-                is_left,
-                is_right,
-            )
-            self.scoop = saved_scoop
+            try:
+                self.scoop = max(0.0, min(float(scoop_val), 1.0))
+                cutter = self._compartment_cutter(
+                    comp_w,
+                    comp_d,
+                    effective_h,
+                    tab,
+                    is_front,
+                    is_back,
+                    is_left,
+                    is_right,
+                )
+            finally:
+                self.scoop = saved_scoop
 
             if self.depth > 0 and self.depth < comp_h:
                 z_off = cutter_z + (comp_h - self.depth)
