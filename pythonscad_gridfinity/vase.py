@@ -319,7 +319,7 @@ class GridfinityVaseBin:
 
         return (
             cube(
-                [0.005, outer[1], wall_h + s.BASE_HEIGHT - d_bottom],
+                [0.005, outer[0], wall_h + s.BASE_HEIGHT - d_bottom],
                 center=True,
             )
             .up(d_bottom + (wall_h + s.BASE_HEIGHT - d_bottom) / 2)
@@ -411,10 +411,12 @@ class GridfinityVaseBin:
     # ------------------------------------------------------------------
 
     def _build_pinch(self):
-        """Pinch the top lip inward for added structural strength.
+        """Narrow the wall near the lip for a tighter stacking fit.
 
-        Creates a thin wall inset from the main wall that reinforces
-        the stacking lip junction.
+        Matches the original gridfinity-rebuilt-openscad ``block_pinch``
+        which sweeps the wall profile inward by ``nozzle + tolerance``
+        so that subtracting it removes a strip of wall material,
+        creating a slight narrowing at the lip junction.
         """
         s = self.spec
         cell = s.GRID_SIZE
@@ -426,18 +428,21 @@ class GridfinityVaseBin:
         ]
         r = s.BASE_TOP_RADIUS
 
-        pinch_inset = wall_t * 2 + s.TOLERANCE * 2
+        pinch_offset = self.nozzle + s.TOLERANCE * 2
         pinch_h = wall_h * 0.15
 
         outer_shell = rounded_square_3d(
-            [outer[0] - pinch_inset, outer[1] - pinch_inset],
-            max(r - pinch_inset / 2, 0.01),
+            [outer[0] - 2 * pinch_offset, outer[1] - 2 * pinch_offset],
+            max(r - pinch_offset, 0.01),
             pinch_h,
             center_xy=True,
         )
         inner_shell = rounded_square_3d(
-            [outer[0] - pinch_inset - 2 * wall_t, outer[1] - pinch_inset - 2 * wall_t],
-            max(r - pinch_inset / 2 - wall_t, 0.01),
+            [
+                outer[0] - 2 * pinch_offset - 2 * wall_t,
+                outer[1] - 2 * pinch_offset - 2 * wall_t,
+            ],
+            max(r - pinch_offset - wall_t, 0.01),
             pinch_h + 0.01,
             center_xy=True,
         )
@@ -517,7 +522,7 @@ class GridfinityVaseBin:
 
         if self.enable_pinch and self.enable_lip:
             pinch = self._build_pinch()
-            result = result | pinch
+            result = result - pinch
 
         if self.enable_front_inset and self.enable_scoop_chamfer:
             inset = self._build_front_inset()
