@@ -228,17 +228,26 @@ class GridfinityBin:
     # ------------------------------------------------------------------
 
     def _wall_height_mm(self):
-        """Height of the main walls above the base, excluding the lip."""
+        """Height of the main walls above the base, excluding the lip.
+
+        In the original, ``height_mm`` *includes* ``BASE_HEIGHT`` and
+        *excludes* ``STACKING_LIP_HEIGHT``.  For units mode the raw
+        value is ``height_u * HEIGHT_UNIT``; the wall portion above
+        ``BASE_HEIGHT`` is ``h - BASE_HEIGHT``.
+
+        Lip style "none" preserves total height by extending the wall
+        into the lip zone.  "reduced"/"subtractive" simply omit the lip
+        without adjusting the wall height.
+        """
         s = self.spec
         if self.height_mode == "units":
             h = self.height_u * s.HEIGHT_UNIT
             if self.enable_zsnap:
-                total = h + s.BASE_HEIGHT
-                if total % 7 != 0:
-                    total = total + 7 - (total % 7)
-                h = total - s.BASE_HEIGHT
-            if self.lip_style in ("reduced", "subtractive"):
-                h -= s.STACKING_LIP_HEIGHT
+                if h % 7 != 0:
+                    h = h + 7 - (h % 7)
+            h -= s.BASE_HEIGHT
+            if self.lip_style == "none":
+                h += s.STACKING_LIP_HEIGHT
             return h
         elif self.height_mode == "mm_internal":
             return self.height_u + s.FLOOR_THICKNESS
@@ -298,11 +307,9 @@ class GridfinityBin:
         cell = self._cell_size
 
         # Dimensions at the top of the base profile for one cell
-        half = self.half_grid
-        top_dim = [d / (2 if half else 1) for d in s.BASE_TOP_DIMENSIONS]
+        top_dim = [cell - s.BASE_GAP, cell - s.BASE_GAP]
         top_r = s.BASE_TOP_RADIUS
 
-        # Inner sweep dimension (top_dim minus the corner diameter)
         inner = [top_dim[0] - 2 * top_r, top_dim[1] - 2 * top_r]
 
         def rr(radius):
@@ -371,8 +378,7 @@ class GridfinityBin:
         """
         s = self.spec
         cell = self._cell_size
-        half = self.half_grid
-        top_dim = [d / (2 if half else 1) for d in s.BASE_TOP_DIMENSIONS]
+        top_dim = [cell - s.BASE_GAP, cell - s.BASE_GAP]
         top_r = s.BASE_TOP_RADIUS
         wall_t = s.WALL_THICKNESS
         bt = min(self.base_thickness, s.BASE_PROFILE_HEIGHT)

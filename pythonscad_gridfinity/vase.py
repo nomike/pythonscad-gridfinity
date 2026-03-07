@@ -90,16 +90,18 @@ class GridfinityVaseBin:
     # ------------------------------------------------------------------
 
     def _wall_height(self):
-        """Wall height in mm above the base profile."""
+        """Wall height in mm above the base.
+
+        Matches the original ``d_height = dht - BASE_HEIGHT`` where
+        ``dht = height_u * HEIGHT_UNIT``.  The stacking lip (if any) is
+        added on top of this wall height, not subtracted from it.
+        """
         s = self.spec
-        raw = self.height_u * s.HEIGHT_UNIT
+        h = self.height_u * s.HEIGHT_UNIT
         if self.enable_zsnap:
-            total = raw + s.BASE_HEIGHT
-            if total % 7 != 0:
-                total = total + 7 - (total % 7)
-            raw = total - s.BASE_HEIGHT
-        lip_h = s.STACKING_LIP_HEIGHT if self.enable_lip else 0
-        return raw - lip_h
+            if h % 7 != 0:
+                h = h + 7 - (h % 7)
+        return h - s.BASE_HEIGHT
 
     # ------------------------------------------------------------------
     # Base shell
