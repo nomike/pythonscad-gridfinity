@@ -6,6 +6,7 @@ compartments, scoops, label tabs, stacking lip, and bottom holes.
 Usage:
     from pythonscad_gridfinity import GridfinityBin, HoleOptions
 
+    # Solid bin (no compartment cuts, like OpenSCAD bin_render without children)
     b = GridfinityBin(3, 2, 6)
     b.render().show()
 
@@ -105,8 +106,11 @@ class GridfinityBin:
             - ``"mm_internal"``: Interior cavity height in mm.
             - ``"mm_external"``: Total external height in mm.
         spec: GridfinitySpec instance. Uses standard dimensions if None.
-        div_x: Number of compartments along X (1 = no dividers).
-        div_y: Number of compartments along Y (1 = no dividers).
+        div_x: Number of compartments along X, or None for a solid
+            bin without compartment cuts (matching OpenSCAD's
+            ``bin_render`` without children).  Set to 1 for a single
+            compartment with scoop/tab.
+        div_y: Number of compartments along Y, or None (same as div_x).
         scoop: Scoop weight from 0.0 (off) to 1.0 (full radius).
         tab_style: Label tab placement. One of TAB_STYLES.
         lip_style: Stacking lip style. One of LIP_STYLES.
@@ -155,8 +159,8 @@ class GridfinityBin:
         height_u,
         *,
         spec=None,
-        div_x=1,
-        div_y=1,
+        div_x=None,
+        div_y=None,
         scoop=1.0,
         tab_style="auto",
         lip_style="normal",
@@ -182,8 +186,8 @@ class GridfinityBin:
         self.grid_x = grid_x
         self.grid_y = grid_y
         self.height_u = height_u
-        self.div_x = max(div_x, 1)
-        self.div_y = max(div_y, 1)
+        self.div_x = max(div_x, 1) if div_x is not None else None
+        self.div_y = max(div_y, 1) if div_y is not None else None
         self.scoop = max(0.0, min(float(scoop), 1.0))
         self.tab_style = tab_style
         self.lip_style = lip_style
@@ -259,7 +263,7 @@ class GridfinityBin:
         """Total height from z=0 (base bottom) to the very top."""
         s = self.spec
         wall_h = self._wall_height_mm()
-        lip_h = s.STACKING_LIP_HEIGHT if self.lip_style == "normal" else 0.0
+        lip_h = self._effective_lip_height() if self.lip_style == "normal" else 0.0
         return s.BASE_HEIGHT + wall_h + lip_h
 
     # ------------------------------------------------------------------
@@ -500,6 +504,123 @@ class GridfinityBin:
     # Stacking lip
     # ------------------------------------------------------------------
 
+    def _effective_lip_height(self):
+        """Actual stacking lip height after filleting the tip.
+
+        The OpenSCAD reference applies a fillet at the sharp tip of the
+        STACKING_LIP_PROFILE, rounding it and reducing the effective
+        height.  Returns the nominal height when the fillet radius is 0.
+        """
+        s = self.spec
+        fillet_r = s.STACKING_LIP_FILLET_RADIUS
+        if fillet_r <= 0:
+            return s.STACKING_LIP_HEIGHT
+
+        lip = s.STACKING_LIP_PROFILE
+        support_h = s.STACKING_LIP_SUPPORT_HEIGHT
+        tol = s.TOLERANCE
+
+        before = lip[2]  # [0.7, 2.5]
+        tip = lip[3]  # [2.6, 4.4]
+        support_drop = support_h + tip[0]  # tan(45deg) * depth
+        after = [tip[0] - tol, -support_drop]
+
+        v0 = [before[0] - tip[0], before[1] - tip[1]]
+        v1 = [after[0] - tip[0], after[1] - tip[1]]
+        cross_val = v0[0] * v1[1] - v0[1] * v1[0]
+        dot_val = v0[0] * v1[0] + v0[1] * v1[1]
+        angle = math.atan2(cross_val, dot_val)
+
+        dist = fillet_r / math.sin(abs(angle) / 2)
+        len_v0 = math.hypot(*v0)
+        len_v1 = math.hypot(*v1)
+        uv0 = [v0[0] / len_v0, v0[1] / len_v0]
+        uv1 = [v1[0] / len_v1, v1[1] / len_v1]
+        bisector = [uv0[0] + uv1[0], uv0[1] + uv1[1]]
+        len_bis = math.hypot(*bisector)
+        ubis = [bisector[0] / len_bis, bisector[1] / len_bis]
+        center_y = tip[1] + dist * ubis[1]
+
+        return center_y + fillet_r
+
+    def _lip_fillet_arc(self):
+        """Compute the filleted lip profile points for the top section.
+
+        Returns a list of (profile_x, profile_y) points starting from
+        the tangent point on the chamfer segment, through the fillet arc,
+        to the tangent point on the support segment.  Coordinates are in
+        the lip's local system (x = radial depth from inner reference,
+        y = height above wall top).
+
+        Returns None when fillet radius is 0.
+        """
+        s = self.spec
+        fillet_r = s.STACKING_LIP_FILLET_RADIUS
+        if fillet_r <= 0:
+            return None
+
+        lip = s.STACKING_LIP_PROFILE
+        support_h = s.STACKING_LIP_SUPPORT_HEIGHT
+        tol = s.TOLERANCE
+
+        before = lip[2]  # [0.7, 2.5]
+        tip = lip[3]  # [2.6, 4.4]
+        support_drop = support_h + tip[0]
+        after = [tip[0] - tol, -support_drop]
+
+        v0 = [before[0] - tip[0], before[1] - tip[1]]
+        v1 = [after[0] - tip[0], after[1] - tip[1]]
+        cross_val = v0[0] * v1[1] - v0[1] * v1[0]
+        dot_val = v0[0] * v1[0] + v0[1] * v1[1]
+        angle = math.atan2(cross_val, dot_val)
+
+        dist = fillet_r / math.sin(abs(angle) / 2)
+        len_v0 = math.hypot(*v0)
+        len_v1 = math.hypot(*v1)
+        uv0 = [v0[0] / len_v0, v0[1] / len_v0]
+        uv1 = [v1[0] / len_v1, v1[1] / len_v1]
+        bisector = [uv0[0] + uv1[0], uv0[1] + uv1[1]]
+        len_bis = math.hypot(*bisector)
+        ubis = [bisector[0] / len_bis, bisector[1] / len_bis]
+        center = [tip[0] + dist * ubis[0], tip[1] + dist * ubis[1]]
+
+        seg_dir = [tip[0] - before[0], tip[1] - before[1]]
+        seg_len_sq = seg_dir[0] ** 2 + seg_dir[1] ** 2
+        t_param = (
+            (center[0] - before[0]) * seg_dir[0] + (center[1] - before[1]) * seg_dir[1]
+        ) / seg_len_sq
+        tangent1 = [
+            before[0] + t_param * seg_dir[0],
+            before[1] + t_param * seg_dir[1],
+        ]
+
+        seg2_dir = [after[0] - tip[0], after[1] - tip[1]]
+        seg2_len_sq = seg2_dir[0] ** 2 + seg2_dir[1] ** 2
+        t2_param = (
+            (center[0] - tip[0]) * seg2_dir[0] + (center[1] - tip[1]) * seg2_dir[1]
+        ) / seg2_len_sq
+        tangent2 = [
+            tip[0] + t2_param * seg2_dir[0],
+            tip[1] + t2_param * seg2_dir[1],
+        ]
+
+        a_start = math.atan2(tangent1[1] - center[1], tangent1[0] - center[0])
+        a_end = math.atan2(tangent2[1] - center[1], tangent2[0] - center[0])
+
+        n_segments = 8
+        points = [tangent1]
+        for i in range(1, n_segments):
+            frac = i / n_segments
+            a = a_start + frac * (a_end - a_start)
+            points.append(
+                [
+                    center[0] + fillet_r * math.cos(a),
+                    center[1] + fillet_r * math.sin(a),
+                ]
+            )
+        points.append(tangent2)
+        return points
+
     def _build_lip(self):
         """Build the stacking lip at the top of the bin.
 
@@ -507,6 +628,9 @@ class GridfinityBin:
         Both envelopes are built as hull-of-slices of solid rounded
         rectangles, ensuring hull() never operates on ring shapes
         (which would fill the hole).
+
+        The tip of the profile is filleted with STACKING_LIP_FILLET_RADIUS
+        to match the OpenSCAD reference implementation.
 
         Returns:
             A 3D PythonSCAD object positioned at the correct z height.
@@ -537,45 +661,53 @@ class GridfinityBin:
         r_base_offset = r_top - s.STACKING_LIP_DEPTH  # 1.15
         r0 = r_base_offset + lip[0][0]  # 1.15 (lip inner tip)
         r1 = r_base_offset + lip[1][0]  # 1.85
-        r3 = r_base_offset + lip[3][0]  # 3.75 = r_top
 
         h1 = lip[1][1]  # 0.7
         h2 = lip[2][1]  # 2.5
-        h3 = lip[3][1]  # 4.4
 
-        # Inner wall radius (where the bin wall meets the lip)
+        effective_h = self._effective_lip_height()
+
         r_wall_inner = r_top - wall_t  # 2.8
 
-        # -- Z control points (absolute) --
-        z_sup = wall_top_z - support_h  # bottom of support
-        z_wt = wall_top_z  # wall top / lip start
-        z_h1 = wall_top_z + h1  # 0.7 above wall top
-        z_h2 = wall_top_z + h2  # 2.5 above wall top
-        z_h3 = wall_top_z + h3  # 4.4 above wall top (lip top)
+        z_sup = wall_top_z - support_h
+        z_wt = wall_top_z
+        z_h1 = wall_top_z + h1
+        z_h2 = wall_top_z + h2
+        z_h3 = wall_top_z + effective_h
 
         def slab(r, z):
             return rr(r).linear_extrude(height=thin).up(z)
 
-        # -- Outer envelope (solid extrusion) --
-        # The outer edge of the lip is constant at r_top from support
-        # bottom to lip top.
         outer_env = rr(r_top).linear_extrude(height=z_h3 - z_sup).up(z_sup)
 
-        # -- Inner envelope (solid hull-of-slices) --
-        # Follows the true inner edge at each height level:
-        #   support bottom: r_wall_inner (2.8)  -- matches bin wall
-        #   wall top:       r0 (1.15)           -- lip inner tip
-        #   h1:             r1 (1.85)           -- expanding
-        #   h2:             r1 (1.85)           -- vertical
-        #   h3:             r3 (3.75)           -- fully open
+        # -- Inner envelope --
+        # Support taper and first two sections are unchanged.
         inner_env = hull(slab(r_wall_inner, z_sup - overlap), slab(r0, z_wt))
         inner_env = inner_env | hull(slab(r0, z_wt - overlap), slab(r1, z_h1))
         inner_env = inner_env | rr(r1).linear_extrude(
             height=(h2 - h1) + 2 * overlap
         ).up(z_h1 - overlap)
-        inner_env = inner_env | hull(
-            slab(r1, z_h2 - overlap), slab(r3 + overlap, z_h3 + overlap)
-        )
+
+        arc_pts = self._lip_fillet_arc()
+        if arc_pts is not None:
+            prev_r = r1
+            prev_z = z_h2 - overlap
+            for pt in arc_pts:
+                cur_r = r_base_offset + pt[0]
+                cur_z = wall_top_z + pt[1]
+                inner_env = inner_env | hull(
+                    slab(prev_r, prev_z),
+                    slab(min(cur_r, r_top), cur_z),
+                )
+                prev_r = min(cur_r, r_top)
+                prev_z = cur_z
+        else:
+            r3 = r_base_offset + lip[3][0]
+            h3 = lip[3][1]
+            inner_env = inner_env | hull(
+                slab(r1, z_h2 - overlap),
+                slab(r3 + overlap, wall_top_z + h3 + overlap),
+            )
 
         return outer_env - inner_env
 
@@ -1014,7 +1146,21 @@ class GridfinityBin:
             body = body - lip_cutter
 
         # ---- 4. Subtract compartment cutters ----
-        if not self.solid:
+        # When div_x/div_y are None (default) and no compartments or
+        # cut_cylinders are set, the bin is solid -- matching the
+        # OpenSCAD bin_render() behaviour without children.
+        has_compartments = not self.solid and (
+            self.div_x is not None
+            or self.div_y is not None
+            or self.compartments is not None
+            or self.cut_cylinders
+        )
+        if has_compartments:
+            nx = self.div_x if self.div_x is not None else 1
+            ny = self.div_y if self.div_y is not None else 1
+            saved_div = (self.div_x, self.div_y)
+            self.div_x, self.div_y = nx, ny
+
             d_magic = -2 * s.FIT_CLEARANCE - 2 * s.WALL_THICKNESS + s.DIVIDER_WIDTH
             gx, gy = self.grid_x, self.grid_y
             cutter_z = floor_z + s.FLOOR_THICKNESS
@@ -1031,6 +1177,8 @@ class GridfinityBin:
                 body = self._cut_grid_compartments(
                     body, comp_h, d_magic, gx, gy, cell, cutter_z
                 )
+
+            self.div_x, self.div_y = saved_div
 
         elif self.solid and self.solid_ratio < 1.0:
             # Partially filled solid: cut out the empty portion at the top

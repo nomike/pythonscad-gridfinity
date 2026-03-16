@@ -20,6 +20,8 @@ bin_simple = GridfinityBin(
     2,
     1,
     3,
+    div_x=1,
+    div_y=1,
     hole_options=HoleOptions(magnet_hole=True),
 )
 bin_simple.render().color("SteelBlue").show()
@@ -47,6 +49,8 @@ bin_nolip = GridfinityBin(
     2,
     1,
     4,
+    div_x=1,
+    div_y=1,
     lip_style="none",
     hole_options=HoleOptions(screw_hole=True, chamfer=True),
 )
@@ -57,6 +61,8 @@ bin_refined = GridfinityBin(
     1,
     1,
     6,
+    div_x=1,
+    div_y=1,
     hole_options=HoleOptions(refined_hole=True),
 )
 bin_refined.render().color("SlateBlue").translate([150, -80, 0]).show()
@@ -115,6 +121,8 @@ bin_lite_sub = GridfinityBin(
     2,
     1,
     4,
+    div_x=1,
+    div_y=1,
     lite=True,
     lip_style="subtractive",
 )
@@ -175,6 +183,8 @@ bin_thumb = GridfinityBin(
     2,
     1,
     6,
+    div_x=1,
+    div_y=1,
     scoop=1.0,
     enable_thumbscrew=True,
     scoop_chamfer=True,
