@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "pythonscad-gridfinity"
-version = "0.1.0"
+version = "0.2.0"
 description = "Gridfinity baseplates and bins for PythonSCAD"
 readme = "README.md"
 license = {text = "MIT"}

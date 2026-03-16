@@ -16,7 +16,7 @@ Quick start::
     b.render().color("SteelBlue").show()
 """
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
 from .spec import GridfinitySpec
 from .holes import HoleOptions, block_base_hole, hole_pattern, refined_hole
