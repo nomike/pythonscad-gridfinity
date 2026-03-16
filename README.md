@@ -37,12 +37,35 @@ Gridfinity objects directly from Python scripts inside PythonSCAD.
 - Configurable grid size (X, Y) and height (in Gridfinity units, internal mm,
   or external mm).
 - Equal compartments via `div_x` / `div_y` dividers.
+- Custom compartment layouts with arbitrary placement and per-compartment
+  scoop / tab control via the `Compartment` class.
 - Finger scoops (adjustable weight 0--1).
 - Label tabs (full, auto, left, center, right, or none).
 - Stacking lip (normal, reduced, or none).
+- Lite bins with hollow shell bases for faster printing and less material.
+- Half-grid bins with 21 mm base units (half the standard 42 mm).
+- Cylindrical cutouts for tool holders (chamfered cylinder holes).
+- Z-snap to round height to the nearest 7 mm increment.
+- Only-corners hole placement to save print time.
+- Compartment depth override.
+- Tab placement control (everywhere or top-left only).
+- Gridfinity Refined thumbscrew holes (M15 x 1.5 compatible) for secure
+  baseplate attachment.
+- Scoop chamfer for easier part removal.
 - Solid bin option with configurable fill ratio.
 - Bottom magnet/screw holes (same options as baseplates).
 - Interior edge fillets using PythonSCAD's native `.fillet()`.
+
+### Spiral / vase-mode bins
+
+- Bins designed for spiral (vase) mode printing with single-wall extrusions.
+- Configurable nozzle width and layer height.
+- Single-wall dividers.
+- Magic slice for slicer compatibility.
+- Base cross pattern for baseplate attachment.
+- Scoop chamfer on the front wall for easy part removal.
+- Lip pinch for added structural strength.
+- Front inset for reinforcement at the scoop area.
 
 ### Hole options
 
@@ -166,6 +189,47 @@ b = GridfinityBin(
 b.render().color("Tomato").show()
 ```
 
+### Custom compartment layout (3 x 2, 6U)
+
+```python
+from pythonscad_gridfinity import GridfinityBin, Compartment, HoleOptions
+
+b = GridfinityBin(
+    3, 2, 6,
+    compartments=[
+        Compartment(0, 0, 2, 2, scoop=1.0, tab_style="left"),
+        Compartment(2, 0, 1, 1, scoop=0.5, tab_style="right"),
+        Compartment(2, 1, 1, 1, scoop=0.0, tab_style="none"),
+    ],
+    hole_options=HoleOptions(magnet_hole=True),
+)
+b.render().color("CadetBlue").show()
+```
+
+### Lite bin with hollow base (2 x 2, 6U)
+
+```python
+from pythonscad_gridfinity import GridfinityBin, HoleOptions
+
+b = GridfinityBin(
+    2, 2, 6,
+    div_x=2, div_y=2,
+    lite=True,
+    base_thickness=1.0,
+    hole_options=HoleOptions(magnet_hole=True),
+)
+b.render().color("LightCoral").show()
+```
+
+### Spiral/vase-mode bin (2 x 1, 6U)
+
+```python
+from pythonscad_gridfinity import GridfinityVaseBin
+
+v = GridfinityVaseBin(2, 1, 6, n_divx=2, nozzle=0.4)
+v.render().color("Tomato").show()
+```
+
 ## Baseplate styles
 
 | Style | Description |
@@ -211,6 +275,7 @@ Tabs are automatically disabled when the bin is shorter than 3 height units.
 | `"normal"` | Standard stacking lip for stacking bins. |
 | `"reduced"` | No lip, height is reduced accordingly. |
 | `"none"` | No lip, but total height is preserved. |
+| `"subtractive"` | Lip zone is subtracted from the bin top (for lite bins). Height is reduced. |
 
 ### Height modes
 
@@ -268,10 +333,60 @@ GridfinityBin(
     height_mode="units",    # One of: units, mm_internal, mm_external
     solid=False,            # Fill the interior (no compartments)
     solid_ratio=1.0,        # Fill fraction when solid (0.0--1.0)
+    compartments=None,      # List of Compartment objects (overrides div_x/div_y)
+    lite=False,             # Hollow shell base for faster printing
+    base_thickness=1.0,     # Bottom thickness in mm (lite bins only)
+    half_grid=False,        # Use 21 mm (half-size) bases; implies only_corners holes
+    cut_cylinders=False,    # Cylindrical cutouts instead of compartments
+    cylinder_diameter=10.0, # Diameter of cylindrical cutouts (mm)
+    cylinder_chamfer=0.5,   # Chamfer radius around top rim (mm)
+    enable_zsnap=False,     # Snap height to nearest 7 mm increment
+    only_corners=False,     # Holes at corners only (saves print time)
+    depth=0,                # Override compartment depth in mm (0 = full)
+    place_tab="everywhere", # "everywhere" or "top_left"
+    enable_thumbscrew=False,# M15x1.5 thumbscrew hole in each base unit
+    scoop_chamfer=False,    # 45-degree chamfer at top of scoop
 )
 ```
 
 Call `.render()` to get a PythonSCAD 3D object, then `.show()` or `.export()`.
+
+### `GridfinityVaseBin`
+
+```python
+GridfinityVaseBin(
+    grid_x, grid_y, height_u,
+    spec=None,              # GridfinitySpec instance (default: standard)
+    nozzle=0.6,             # Nozzle width in mm (walls = 2 * nozzle)
+    layer_height=0.35,      # Slicer layer height in mm
+    bottom_layers=3,        # Number of solid bottom layers
+    n_divx=1,               # Number of X compartments (single-wall dividers)
+    enable_lip=True,        # Include stacking lip
+    enable_holes=True,      # Magnet holes in the base
+    enable_zsnap=False,     # Snap height to nearest 7 mm increment
+    enable_scoop_chamfer=True,  # Front wall chamfer for easy part removal
+    enable_pinch=True,      # Pinch lip for structural strength
+    enable_front_inset=True,# Front reinforcement when scoop is present
+)
+```
+
+Call `.render()` to get a PythonSCAD 3D object. **Print in spiral/vase mode.**
+
+### `Compartment`
+
+Defines a single compartment in a custom layout. Positions and sizes are in
+fractional grid units relative to the bin's `grid_x` / `grid_y`.
+
+```python
+Compartment(
+    x,                      # Grid X position of left edge
+    y,                      # Grid Y position of front edge
+    w,                      # Grid width (X)
+    h,                      # Grid depth (Y)
+    scoop=None,             # Scoop weight 0.0--1.0 (None inherits from bin)
+    tab_style=None,         # Tab style (None inherits from bin)
+)
+```
 
 ### `HoleOptions`
 
@@ -285,6 +400,8 @@ compose custom objects:
 - `block_base_hole(options, spec)` -- single combined magnet/screw hole
 - `hole_pattern(obj, spec)` -- place an object at the four hole positions
 - `refined_hole(spec)` -- Gridfinity Refined magnet hole geometry
+- `cut_chamfered_cylinder(radius, depth, chamfer_radius, cut_lip)` --
+  chamfered cylindrical cutout for tool holders
 
 ## Project structure
 
@@ -297,9 +414,11 @@ pythonscad-gridfinity/
     holes.py          # HoleOptions and hole geometry builders
     baseplate.py      # GridfinityBaseplate class
     bin.py            # GridfinityBin class
+    vase.py           # GridfinityVaseBin class (spiral/vase mode)
   examples/
     basic_baseplate.py
     basic_bin.py
+    vase_bin.py
   pyproject.toml
   LICENSE
   README.md

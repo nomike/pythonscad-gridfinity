@@ -18,9 +18,23 @@ Usage:
         hole_options=HoleOptions(magnet_hole=True),
     )
     b.render().show()
+
+    # Custom compartment layout
+    from pythonscad_gridfinity import Compartment
+    b = GridfinityBin(
+        3, 2, 6,
+        compartments=[
+            Compartment(0, 0, 2, 1, scoop=1.0, tab_style="left"),
+            Compartment(2, 0, 1, 2, scoop=0.5, tab_style="right"),
+            Compartment(0, 1, 2, 1, tab_style="none"),
+        ],
+        hole_options=HoleOptions(magnet_hole=True),
+    )
+    b.render().show()
 """
 
 import math
+from dataclasses import dataclass
 
 from openscad import *
 
@@ -30,12 +44,50 @@ from .helpers import (
     rounded_square,
     rounded_square_3d,
     grid_positions,
+    cut_chamfered_cylinder,
 )
 
 
 TAB_STYLES = ("full", "auto", "left", "center", "right", "none")
-LIP_STYLES = ("normal", "reduced", "none")
+LIP_STYLES = ("normal", "reduced", "none", "subtractive")
 HEIGHT_MODES = ("units", "mm_internal", "mm_external")
+
+
+@dataclass
+class Compartment:
+    """Defines one compartment in a custom layout.
+
+    Positions and sizes are in fractional grid units relative to the
+    bin's grid_x / grid_y.  For example, in a 3x2 bin a compartment
+    at ``(0, 0)`` with size ``(1.5, 1)`` occupies the left half of
+    the bottom row.
+
+    Compartments may overlap — the union of all cutters is subtracted
+    from the bin body.
+
+    Args:
+        x: Fractional grid X position of the compartment's left edge.
+        y: Fractional grid Y position of the compartment's front edge.
+        w: Fractional grid width (X).
+        h: Fractional grid depth (Y).
+        scoop: Scoop weight 0.0–1.0.  None inherits from the bin.
+        tab_style: Tab placement.  None inherits from the bin.
+    """
+
+    x: float
+    y: float
+    w: float
+    h: float
+    scoop: float | None = None
+    tab_style: str | None = None
+
+    def __post_init__(self):
+        if self.w <= 0 or self.h <= 0:
+            raise ValueError("Compartment w and h must be positive")
+        if self.tab_style is not None and self.tab_style not in TAB_STYLES:
+            raise ValueError(
+                f"Unknown tab_style '{self.tab_style}'. Must be one of {TAB_STYLES}"
+            )
 
 
 class GridfinityBin:
@@ -62,7 +114,39 @@ class GridfinityBin:
         height_mode: How to interpret *height_u*. One of HEIGHT_MODES.
         solid: If True, fill the interior (no compartments).
         solid_ratio: When solid, fraction of interior to fill (0.0--1.0).
+        compartments: List of Compartment objects for custom layouts.
+            When provided, *div_x* / *div_y* are ignored and each
+            Compartment specifies its own position, size, scoop, and
+            tab style in fractional grid units.  Compartments may overlap.
+        lite: If True, build a lite bin with a hollow shell base instead
+            of the standard solid base profile.  Uses less material and
+            prints faster.
+        base_thickness: Bottom layer thickness in mm for lite bins
+            (default 1.0).  Ignored when *lite* is False.
+        half_grid: If True, use half-size (21 mm) grid bases instead of
+            the standard 42 mm.  Implies ``only_corners`` for hole
+            placement.
+        cut_cylinders: If True, use cylindrical cutouts instead of
+            rectangular compartments.  Useful for tool holders.
+        cylinder_diameter: Diameter of cylindrical cutouts in mm.
+        cylinder_chamfer: Chamfer radius around the top rim of each
+            cylindrical cutout in mm.
+        enable_zsnap: If True, snap the total height to the nearest
+            7 mm increment (Gridfinity unit boundary).
+        only_corners: If True, place magnet/screw holes only at the
+            four outer corners of the bin instead of at every grid cell.
+        depth: Override compartment depth in mm.  0 means use the
+            default (full interior height).
+        place_tab: ``"everywhere"`` puts tabs on every compartment;
+            ``"top_left"`` only on the top-left compartment.
+        enable_thumbscrew: If True, add a Gridfinity Refined thumbscrew
+            hole (M15 x 1.5 compatible) in the center of each base
+            unit for secure baseplate attachment.
+        scoop_chamfer: If True, add a 45-degree chamfer at the top edge
+            of the scoop for easier part removal.
     """
+
+    PLACE_TAB_OPTIONS = ("everywhere", "top_left")
 
     def __init__(
         self,
@@ -80,6 +164,19 @@ class GridfinityBin:
         height_mode="units",
         solid=False,
         solid_ratio=1.0,
+        compartments=None,
+        lite=False,
+        base_thickness=1.0,
+        half_grid=False,
+        cut_cylinders=False,
+        cylinder_diameter=10.0,
+        cylinder_chamfer=0.5,
+        enable_zsnap=False,
+        only_corners=False,
+        depth=0,
+        place_tab="everywhere",
+        enable_thumbscrew=False,
+        scoop_chamfer=False,
     ):
         self.spec = spec or GridfinitySpec()
         self.grid_x = grid_x
@@ -94,6 +191,19 @@ class GridfinityBin:
         self.height_mode = height_mode
         self.solid = solid
         self.solid_ratio = max(0.0, min(float(solid_ratio), 1.0))
+        self.compartments = compartments
+        self.lite = lite
+        self.base_thickness = max(0.0, float(base_thickness))
+        self.half_grid = half_grid
+        self.cut_cylinders = cut_cylinders
+        self.cylinder_diameter = float(cylinder_diameter)
+        self.cylinder_chamfer = float(cylinder_chamfer)
+        self.enable_zsnap = enable_zsnap
+        self.only_corners = only_corners
+        self.depth = float(depth)
+        self.place_tab = place_tab
+        self.enable_thumbscrew = enable_thumbscrew
+        self.scoop_chamfer = scoop_chamfer
 
         if tab_style not in TAB_STYLES:
             raise ValueError(
@@ -107,18 +217,37 @@ class GridfinityBin:
             raise ValueError(
                 f"Unknown height_mode '{height_mode}'. Must be one of {HEIGHT_MODES}"
             )
+        if place_tab not in self.PLACE_TAB_OPTIONS:
+            raise ValueError(
+                f"Unknown place_tab '{place_tab}'. "
+                f"Must be one of {self.PLACE_TAB_OPTIONS}"
+            )
 
     # ------------------------------------------------------------------
     # Height calculations
     # ------------------------------------------------------------------
 
     def _wall_height_mm(self):
-        """Height of the main walls above the base, excluding the lip."""
+        """Height of the main walls above the base, excluding the lip.
+
+        In the original, ``height_mm`` *includes* ``BASE_HEIGHT`` and
+        *excludes* ``STACKING_LIP_HEIGHT``.  For units mode the raw
+        value is ``height_u * HEIGHT_UNIT``; the wall portion above
+        ``BASE_HEIGHT`` is ``h - BASE_HEIGHT``.
+
+        Lip style "none" preserves total height by extending the wall
+        into the lip zone.  "reduced"/"subtractive" simply omit the lip
+        without adjusting the wall height.
+        """
         s = self.spec
         if self.height_mode == "units":
             h = self.height_u * s.HEIGHT_UNIT
-            if self.lip_style == "reduced":
-                h -= s.STACKING_LIP_HEIGHT
+            if self.enable_zsnap:
+                if h % 7 != 0:
+                    h = h + 7 - (h % 7)
+            h -= s.BASE_HEIGHT
+            if self.lip_style == "none":
+                h += s.STACKING_LIP_HEIGHT
             return h
         elif self.height_mode == "mm_internal":
             return self.height_u + s.FLOOR_THICKNESS
@@ -134,6 +263,16 @@ class GridfinityBin:
         return s.BASE_HEIGHT + wall_h + lip_h
 
     # ------------------------------------------------------------------
+    # Grid cell size
+    # ------------------------------------------------------------------
+
+    @property
+    def _cell_size(self):
+        """Effective grid cell size in mm (42 or 21 for half_grid)."""
+        s = self.spec
+        return s.GRID_SIZE / (2 if self.half_grid else 1)
+
+    # ------------------------------------------------------------------
     # Outer dimensions
     # ------------------------------------------------------------------
 
@@ -144,9 +283,10 @@ class GridfinityBin:
             [width, depth] in mm.
         """
         s = self.spec
+        cell = self._cell_size
         return [
-            self.grid_x * s.GRID_SIZE - s.BASE_GAP,
-            self.grid_y * s.GRID_SIZE - s.BASE_GAP,
+            self.grid_x * cell - s.BASE_GAP,
+            self.grid_y * cell - s.BASE_GAP,
         ]
 
     # ------------------------------------------------------------------
@@ -164,13 +304,12 @@ class GridfinityBin:
         """
         s = self.spec
         profile = s.BASE_PROFILE
-        cell = s.GRID_SIZE
+        cell = self._cell_size
 
         # Dimensions at the top of the base profile for one cell
-        top_dim = s.BASE_TOP_DIMENSIONS  # [41.5, 41.5]
-        top_r = s.BASE_TOP_RADIUS  # 3.75
+        top_dim = [cell - s.BASE_GAP, cell - s.BASE_GAP]
+        top_r = s.BASE_TOP_RADIUS
 
-        # Inner sweep dimension (top_dim minus the corner diameter)
         inner = [top_dim[0] - 2 * top_r, top_dim[1] - 2 * top_r]
 
         def rr(radius):
@@ -222,6 +361,119 @@ class GridfinityBin:
             base = placed if base is None else (base | placed)
 
         return base
+
+    # ------------------------------------------------------------------
+    # Lite base (hollow shell)
+    # ------------------------------------------------------------------
+
+    def _build_base_lite(self):
+        """Build a hollow shell base for lite bins.
+
+        Instead of the solid per-cell base profiles, this creates a thin
+        outer shell that follows the base profile shape and a flat bottom
+        at *base_thickness* height.  This saves material and print time.
+
+        Returns:
+            A 3D PythonSCAD object centered in XY, bottom at z=0.
+        """
+        s = self.spec
+        cell = self._cell_size
+        top_dim = [cell - s.BASE_GAP, cell - s.BASE_GAP]
+        top_r = s.BASE_TOP_RADIUS
+        wall_t = s.WALL_THICKNESS
+        bt = min(self.base_thickness, s.BASE_PROFILE_HEIGHT)
+
+        inner = [top_dim[0] - 2 * top_r, top_dim[1] - 2 * top_r]
+
+        def rr(radius):
+            return rounded_square(
+                [inner[0] + 2 * radius, inner[1] + 2 * radius],
+                max(radius, 0.01),
+                center=True,
+            )
+
+        profile = s.BASE_PROFILE
+        thin = 0.01
+        overlap = 0.001
+
+        z1 = profile[1][1]
+        z2 = profile[2][1]
+        z3 = profile[3][1]
+        z4 = s.BASE_HEIGHT
+
+        r0 = top_r - profile[3][0]
+        r1 = top_r - profile[3][0] + profile[1][0]
+        r3 = top_r
+
+        # Outer shell for one cell
+        bot = rr(r0).linear_extrude(height=thin)
+        top = rr(r1).linear_extrude(height=thin).up(z1)
+        outer = hull(bot, top)
+        outer = outer | rr(r1).linear_extrude(height=(z2 - z1) + 2 * overlap).up(
+            z1 - overlap
+        )
+        bot2 = rr(r1).linear_extrude(height=thin).up(z2 - overlap)
+        top2 = rr(r3).linear_extrude(height=thin).up(z3)
+        outer = outer | hull(bot2, top2)
+        outer = outer | rr(r3).linear_extrude(height=(z4 - z3) + overlap).up(
+            z3 - overlap
+        )
+
+        # Inner cavity: shrink radii by wall_thickness
+        ir0 = max(r0 - wall_t, 0.01)
+        ir1 = max(r1 - wall_t, 0.01)
+        ir3 = max(r3 - wall_t, 0.01)
+
+        i_bot = rr(ir0).linear_extrude(height=thin)
+        i_top = rr(ir1).linear_extrude(height=thin).up(z1)
+        cavity = hull(i_bot, i_top)
+        cavity = cavity | rr(ir1).linear_extrude(height=(z2 - z1) + 2 * overlap).up(
+            z1 - overlap
+        )
+        i_bot2 = rr(ir1).linear_extrude(height=thin).up(z2 - overlap)
+        i_top2 = rr(ir3).linear_extrude(height=thin).up(z3)
+        cavity = cavity | hull(i_bot2, i_top2)
+        cavity = cavity | rr(ir3).linear_extrude(height=(z4 - z3) + 2 * overlap).up(
+            z3 - overlap
+        )
+
+        # Cut cavity above bottom_thickness
+        cavity = cavity - cube(
+            [top_dim[0] + 1, top_dim[1] + 1, bt + overlap],
+            center=True,
+        ).up((bt + overlap) / 2 - overlap)
+
+        single_cell = outer - cavity
+
+        # Solid bridge across all cells at the top
+        grid_outer = [
+            self.grid_x * cell - s.BASE_GAP,
+            self.grid_y * cell - s.BASE_GAP,
+        ]
+        bridge = rounded_square_3d(
+            grid_outer, top_r, z4 - z3 + overlap, center_xy=True
+        ).up(z3 - overlap)
+
+        bridge_inner = rounded_square_3d(
+            [grid_outer[0] - 2 * wall_t, grid_outer[1] - 2 * wall_t],
+            max(top_r - wall_t, 0.01),
+            z4 - z3 + 3 * overlap,
+            center_xy=True,
+        ).up(z3 - 2 * overlap)
+
+        bridge = bridge - bridge_inner
+
+        # Bottom solid layer across all cells
+        if bt > 0:
+            bottom_slab = rounded_square_3d(grid_outer, top_r, bt, center_xy=True)
+            bridge = bridge | bottom_slab
+
+        base = None
+        for cx, cy in grid_positions([self.grid_x, self.grid_y], cell, center=True):
+            placed = single_cell.translate([cx, cy, 0])
+            base = placed if base is None else (base | placed)
+
+        return base | bridge
 
     # ------------------------------------------------------------------
     # Outer body
@@ -382,6 +634,29 @@ class GridfinityBin:
             if scoop_obj is not None:
                 cutter = cutter | scoop_obj
 
+        # ---- Scoop chamfer ----
+        if self.scoop_chamfer and self.scoop > 0 and is_front:
+            scoop_r = max(self.scoop * comp_h / 2 - s.FILLET_RADIUS, 0)
+            if scoop_r >= 0.01:
+                chamfer_depth = min(scoop_r * 0.3, 2.0)
+                chamfer_block = (
+                    cube(
+                        [
+                            comp_w - 2 * s.FILLET_RADIUS,
+                            chamfer_depth * 2,
+                            chamfer_depth * 2,
+                        ],
+                        center=True,
+                    )
+                    .rotx(-45)
+                    .translate([0, -comp_d / 2, comp_h])
+                )
+                clip = cube(
+                    [comp_w, comp_d + 2, comp_h * 2],
+                    center=True,
+                ).up(comp_h)
+                cutter = cutter | (chamfer_block & clip)
+
         # ---- Tab ----
         # The tab is SUBTRACTED from the cutter: where the tab shape
         # overlaps, the cutter does not cut, leaving bin material that
@@ -512,6 +787,196 @@ class GridfinityBin:
         return tab_3d
 
     # ------------------------------------------------------------------
+    # Thumbscrew hole
+    # ------------------------------------------------------------------
+
+    def _build_thumbscrew_hole(self):
+        """Build a simplified M15x1.5 thumbscrew hole for one grid cell.
+
+        Creates a threaded-style hole compatible with Gridfinity Refined
+        thumbscrews.  Uses a helical approximation with triangular
+        thread profile rather than a full ISO thread library.
+
+        Returns:
+            A 3D PythonSCAD object centered at the origin.
+        """
+        s = self.spec
+        d = s.THUMBSCREW_DIAMETER
+        pitch = s.THUMBSCREW_PITCH
+        h = s.THUMBSCREW_HEIGHT
+
+        minor_d = d - 1.0825 * pitch
+        core = cylinder(h=h, d=minor_d, fn=48)
+
+        n_turns = int(h / pitch) + 1
+        thread_depth = (d - minor_d) / 2
+        fn_thread = 8
+
+        outer = cylinder(h=h, d=d, fn=48)
+
+        grooves = None
+        for i in range(n_turns * fn_thread):
+            angle = i * 360.0 / fn_thread
+            z = (i / fn_thread) * pitch
+            if z > h:
+                break
+            seg_h = pitch * 0.4
+            seg = (
+                cube([thread_depth + 0.1, 0.3, seg_h], center=True)
+                .translate([d / 2 - thread_depth / 2, 0, z])
+                .rotz(angle)
+            )
+            grooves = seg if grooves is None else (grooves | seg)
+
+        if grooves is not None:
+            hole = core | (outer - grooves)
+        else:
+            hole = outer
+
+        return hole
+
+    # ------------------------------------------------------------------
+    # Compartment layout helpers
+    # ------------------------------------------------------------------
+
+    def _cut_grid_compartments(self, body, comp_h, d_magic, gx, gy, cell, cutter_z):
+        """Cut equal-grid compartments defined by div_x / div_y."""
+        s = self.spec
+        nx, ny = self.div_x, self.div_y
+
+        effective_h = self.depth if self.depth > 0 else comp_h
+
+        for ix in range(nx):
+            for iy in range(ny):
+                fx = ix / nx
+                fy = iy / ny
+                fw = 1.0 / nx
+                fh = 1.0 / ny
+
+                comp_w = fw * (gx * cell + d_magic) - s.DIVIDER_WIDTH
+                comp_d = fh * (gy * cell + d_magic) - s.DIVIDER_WIDTH
+
+                cx = (fx + fw / 2 - 0.5) * (gx * cell + d_magic)
+                cy = (fy + fh / 2 - 0.5) * (gy * cell + d_magic)
+
+                is_front = iy == 0
+                is_back = iy == ny - 1
+                is_left = ix == 0
+                is_right = ix == nx - 1
+
+                # Resolve tab placement
+                is_top_left = is_back and is_left
+                if self.place_tab == "top_left" and not is_top_left:
+                    tab_resolved = "none"
+                elif self.tab_style == "auto":
+                    if is_left:
+                        tab_resolved = "left"
+                    elif is_right:
+                        tab_resolved = "right"
+                    else:
+                        tab_resolved = "center"
+                else:
+                    tab_resolved = self.tab_style
+
+                cutter = self._compartment_cutter(
+                    comp_w,
+                    comp_d,
+                    effective_h,
+                    tab_resolved,
+                    is_front,
+                    is_back,
+                    is_left,
+                    is_right,
+                )
+                # When depth is overridden, position the cutter so the top
+                # aligns with the wall top
+                if self.depth > 0 and self.depth < comp_h:
+                    z_off = cutter_z + (comp_h - self.depth)
+                else:
+                    z_off = cutter_z
+                body = body - cutter.translate([cx, cy, z_off])
+
+        return body
+
+    def _cut_cylinder_compartments(self, body, comp_h, d_magic, gx, gy, cell, cutter_z):
+        """Cut cylindrical holes at each grid division center."""
+        nx, ny = self.div_x, self.div_y
+        cyl_r = self.cylinder_diameter / 2
+        cyl_chamfer = self.cylinder_chamfer
+
+        for ix in range(nx):
+            for iy in range(ny):
+                fx = ix / nx
+                fy = iy / ny
+                fw = 1.0 / nx
+                fh = 1.0 / ny
+
+                cx = (fx + fw / 2 - 0.5) * (gx * cell + d_magic)
+                cy = (fy + fh / 2 - 0.5) * (gy * cell + d_magic)
+
+                cyl = cut_chamfered_cylinder(cyl_r, comp_h, cyl_chamfer)
+                body = body - cyl.translate([cx, cy, cutter_z + comp_h])
+
+        return body
+
+    def _cut_custom_compartments(self, body, comp_h, d_magic, gx, gy, cell, cutter_z):
+        """Cut compartments from a list of Compartment objects."""
+        s = self.spec
+        total_w = gx * cell + d_magic
+        total_d = gy * cell + d_magic
+        effective_h = self.depth if self.depth > 0 else comp_h
+
+        for comp in self.compartments:
+            comp_w = (comp.w / gx) * total_w - s.DIVIDER_WIDTH
+            comp_d = (comp.h / gy) * total_d - s.DIVIDER_WIDTH
+
+            cx = ((comp.x + comp.w / 2) / gx - 0.5) * total_w
+            cy = ((comp.y + comp.h / 2) / gy - 0.5) * total_d
+
+            is_front = comp.y <= 0
+            is_back = (comp.y + comp.h) >= gy
+            is_left = comp.x <= 0
+            is_right = (comp.x + comp.w) >= gx
+
+            scoop_val = comp.scoop if comp.scoop is not None else self.scoop
+            tab = comp.tab_style if comp.tab_style is not None else self.tab_style
+
+            is_top_left = is_back and is_left
+            if self.place_tab == "top_left" and not is_top_left:
+                tab = "none"
+            elif tab == "auto":
+                if is_left:
+                    tab = "left"
+                elif is_right:
+                    tab = "right"
+                else:
+                    tab = "center"
+
+            saved_scoop = self.scoop
+            try:
+                self.scoop = max(0.0, min(float(scoop_val), 1.0))
+                cutter = self._compartment_cutter(
+                    comp_w,
+                    comp_d,
+                    effective_h,
+                    tab,
+                    is_front,
+                    is_back,
+                    is_left,
+                    is_right,
+                )
+            finally:
+                self.scoop = saved_scoop
+
+            if self.depth > 0 and self.depth < comp_h:
+                z_off = cutter_z + (comp_h - self.depth)
+            else:
+                z_off = cutter_z
+            body = body - cutter.translate([cx, cy, z_off])
+
+        return body
+
+    # ------------------------------------------------------------------
     # Main render
     # ------------------------------------------------------------------
 
@@ -523,7 +988,7 @@ class GridfinityBin:
         """
         s = self.spec
         tol = s.TOLERANCE
-        cell = s.GRID_SIZE
+        cell = self._cell_size
         outer = self._outer_dimensions()
         wall_h = self._wall_height_mm()
         wall_top_z = s.BASE_HEIGHT + wall_h
@@ -534,7 +999,7 @@ class GridfinityBin:
         comp_h = wall_h - s.FLOOR_THICKNESS
 
         # ---- 1. Base ----
-        base = self._build_base()
+        base = self._build_base_lite() if self.lite else self._build_base()
 
         # ---- 2. Outer body ----
         body = self._build_body()
@@ -543,59 +1008,29 @@ class GridfinityBin:
         if self.lip_style == "normal":
             lip = self._build_lip()
             body = body | lip
+        elif self.lip_style == "subtractive":
+            # Remove the lip zone from the top of the bin
+            lip_cutter = self._build_lip()
+            body = body - lip_cutter
 
         # ---- 4. Subtract compartment cutters ----
         if not self.solid:
-            # Compartment sizing from the OpenSCAD formulas
             d_magic = -2 * s.FIT_CLEARANCE - 2 * s.WALL_THICKNESS + s.DIVIDER_WIDTH
             gx, gy = self.grid_x, self.grid_y
-            nx, ny = self.div_x, self.div_y
+            cutter_z = floor_z + s.FLOOR_THICKNESS
 
-            for ix in range(nx):
-                for iy in range(ny):
-                    # Fractional position and size in grid units
-                    fx = ix / nx
-                    fy = iy / ny
-                    fw = 1.0 / nx
-                    fh = 1.0 / ny
-
-                    comp_w = fw * (gx * cell + d_magic) - s.DIVIDER_WIDTH
-                    comp_d = fh * (gy * cell + d_magic) - s.DIVIDER_WIDTH
-
-                    # Center position of this compartment
-                    cx = (fx + fw / 2 - 0.5) * (gx * cell + d_magic)
-                    cy = (fy + fh / 2 - 0.5) * (gy * cell + d_magic)
-
-                    is_front = iy == 0
-                    is_back = iy == ny - 1
-                    is_left = ix == 0
-                    is_right = ix == nx - 1
-
-                    # Resolve "auto" tab style
-                    if self.tab_style == "auto":
-                        if is_left:
-                            tab_resolved = "left"
-                        elif is_right:
-                            tab_resolved = "right"
-                        else:
-                            tab_resolved = "center"
-                    else:
-                        tab_resolved = self.tab_style
-
-                    cutter = self._compartment_cutter(
-                        comp_w,
-                        comp_d,
-                        comp_h,
-                        tab_resolved,
-                        is_front,
-                        is_back,
-                        is_left,
-                        is_right,
-                    )
-
-                    # Position: centered at (cx, cy), floor at floor_z + floor_thickness
-                    cutter_z = floor_z + s.FLOOR_THICKNESS
-                    body = body - cutter.translate([cx, cy, cutter_z])
+            if self.cut_cylinders:
+                body = self._cut_cylinder_compartments(
+                    body, comp_h, d_magic, gx, gy, cell, cutter_z
+                )
+            elif self.compartments is not None:
+                body = self._cut_custom_compartments(
+                    body, comp_h, d_magic, gx, gy, cell, cutter_z
+                )
+            else:
+                body = self._cut_grid_compartments(
+                    body, comp_h, d_magic, gx, gy, cell, cutter_z
+                )
 
         elif self.solid and self.solid_ratio < 1.0:
             # Partially filled solid: cut out the empty portion at the top
@@ -624,10 +1059,30 @@ class GridfinityBin:
         if self.hole_options and self.hole_options.has_any_hole:
             hole_obj = block_base_hole(self.hole_options, spec=s)
             if hole_obj is not None:
-                for cx, cy in grid_positions(
-                    [self.grid_x, self.grid_y], cell, center=True
-                ):
-                    holes = hole_pattern(hole_obj, spec=s).translate([cx, cy, 0])
-                    result = result - holes
+                corners_only = self.only_corners or self.half_grid
+                if corners_only:
+                    d = s.HOLE_FROM_CENTER
+                    full_cell = s.GRID_SIZE
+                    outer_half = [
+                        self.grid_x * cell / 2 - full_cell / 2,
+                        self.grid_y * cell / 2 - full_cell / 2,
+                    ]
+                    for sx in (-1, 1):
+                        for sy in (-1, 1):
+                            hx = sx * (outer_half[0] + d)
+                            hy = sy * (outer_half[1] + d)
+                            result = result - hole_obj.translate([hx, hy, 0])
+                else:
+                    for cx, cy in grid_positions(
+                        [self.grid_x, self.grid_y], cell, center=True
+                    ):
+                        holes = hole_pattern(hole_obj, spec=s).translate([cx, cy, 0])
+                        result = result - holes
+
+        # ---- 7. Subtract thumbscrew holes ----
+        if self.enable_thumbscrew:
+            ts_hole = self._build_thumbscrew_hole()
+            for cx, cy in grid_positions([self.grid_x, self.grid_y], cell, center=True):
+                result = result - ts_hole.translate([cx, cy, 0])
 
         return result
