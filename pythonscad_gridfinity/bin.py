@@ -607,7 +607,7 @@ class GridfinityBin:
         a_start = math.atan2(tangent1[1] - center[1], tangent1[0] - center[0])
         a_end = math.atan2(tangent2[1] - center[1], tangent2[0] - center[0])
 
-        n_segments = 8
+        n_segments = 12
         points = [tangent1]
         for i in range(1, n_segments):
             frac = i / n_segments
@@ -1196,6 +1196,26 @@ class GridfinityBin:
                     center_xy=True,
                 ).up(wall_top_z - empty_h)
                 body = body - empty_cut
+
+        # Solid bins with a stacking lip: cut the support zone pocket
+        # so the infill ends at wall_top - STACKING_LIP_SUPPORT_HEIGHT,
+        # leaving only the thin wall ring in the lip support zone.
+        # This matches OpenSCAD's bin_render_infill / bin_render_wall
+        # separation where the infill never fills the support zone.
+        if not has_compartments and self.lip_style == "normal":
+            sup_h = s.STACKING_LIP_SUPPORT_HEIGHT
+            if sup_h > 0 and wall_h > sup_h:
+                inner_cut_dim = [
+                    outer[0] - 2 * s.WALL_THICKNESS,
+                    outer[1] - 2 * s.WALL_THICKNESS,
+                ]
+                support_pocket = rounded_square_3d(
+                    inner_cut_dim,
+                    s.BASE_TOP_RADIUS,
+                    sup_h + tol,
+                    center_xy=True,
+                ).up(wall_top_z - sup_h)
+                body = body - support_pocket
 
         # ---- 5. Union body + base ----
         result = body | base
