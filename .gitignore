@@ -30,3 +30,6 @@ Thumbs.db
 *.3mf
 *.off
 *.amf
+
+# Cloned reference (clone with: git clone https://github.com/kennetek/gridfinity-rebuilt-openscad.git tests/gridfinity-rebuilt-openscad)
+tests/gridfinity-rebuilt-openscad/

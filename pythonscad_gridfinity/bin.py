@@ -621,95 +621,105 @@ class GridfinityBin:
         points.append(tangent2)
         return points
 
+    def _get_wall_profile_polygon(self):
+        """Build the 2D wall+lip profile polygon matching OpenSCAD _profile_wall.
+
+        Returns a list of [x, y] points in sweep coordinates: x = radial
+        distance from the inner rectangle path, y = height above path base.
+        Used by _sweep_lip_profile to match the OpenSCAD sweep_rounded result.
+        """
+        s = self.spec
+        wall_h = self._wall_height_mm()
+        x_off = s.BASE_TOP_RADIUS - s.STACKING_LIP_DEPTH  # 1.15
+
+        # Full lip polygon: points 0,1,2, (fillet arc), support points.
+        # STACKING_LIP = line + [[tip.x-tol, -support_drop], [0, -SUPPORT_HEIGHT]]
+        lip = s.STACKING_LIP_PROFILE
+        support_h = s.STACKING_LIP_SUPPORT_HEIGHT
+        tol = s.TOLERANCE
+        tip = lip[3]
+        support_drop = support_h + tip[0]
+        after_tip = [tip[0] - tol, -support_drop]
+        support_inner = [0, -support_h]
+
+        points = []
+        points.append([lip[0][0] + x_off, max(lip[0][1] + wall_h, 0)])
+        points.append([lip[1][0] + x_off, max(lip[1][1] + wall_h, 0)])
+        points.append([lip[2][0] + x_off, max(lip[2][1] + wall_h, 0)])
+
+        arc_pts = self._lip_fillet_arc()
+        if arc_pts is not None:
+            for pt in arc_pts:
+                points.append([pt[0] + x_off, max(pt[1] + wall_h, 0)])
+        else:
+            points.append([lip[3][0] + x_off, max(lip[3][1] + wall_h, 0)])
+
+        points.append([after_tip[0] + x_off, max(after_tip[1] + wall_h, 0)])
+        points.append([support_inner[0] + x_off, max(support_inner[1] + wall_h, 0)])
+
+        return points
+
+    def _sweep_lip_profile(self, inner_size_2d, profile_points):
+        """Sweep a 2D profile (outward, height) around a centered rectangle.
+
+        Replicates OpenSCAD sweep_rounded: linear_extrude along each edge,
+        rotate_extrude(90) at each corner. inner_size_2d is [width, length]
+        of the path rectangle (grid size minus 2*BASE_TOP_RADIUS).
+        """
+        hw = inner_size_2d[0] / 2
+        hl = inner_size_2d[1] / 2
+        L = inner_size_2d[0]  # same for square
+
+        poly_2d = polygon(profile_points)
+        slab = poly_2d.linear_extrude(height=L)
+
+        # Base transform: (outward, height, extent) -> (extent, outward, height)
+        slab = slab.rotx(90).rotz(90)
+
+        # Four edges: place (extent, outward, height) and translate to edge
+        top = slab.translate([-hw, hl, 0])
+        right = slab.rotz(-90).translate([hw, hl, 0])
+        bottom = slab.rotz(-180).translate([hw, -hl, 0])
+        left = slab.rotz(-270).translate([-hw, -hl, 0])
+
+        # Four corners: rotate_extrude(90) then place
+        corner_slab = poly_2d.rotate_extrude(angle=90)
+        c1 = corner_slab.translate([hw, hl, 0])
+        c2 = corner_slab.rotz(-90).translate([hw, -hl, 0])
+        c3 = corner_slab.rotz(-180).translate([-hw, -hl, 0])
+        c4 = corner_slab.rotz(-270).translate([-hw, hl, 0])
+
+        return top | right | bottom | left | c1 | c2 | c3 | c4
+
     def _build_lip(self):
         """Build the stacking lip at the top of the bin.
 
-        The lip is constructed as (outer_envelope - inner_envelope).
-        Both envelopes are built as hull-of-slices of solid rounded
-        rectangles, ensuring hull() never operates on ring shapes
-        (which would fill the hole).
-
-        The tip of the profile is filleted with STACKING_LIP_FILLET_RADIUS
-        to match the OpenSCAD reference implementation.
-
-        Returns:
-            A 3D PythonSCAD object positioned at the correct z height.
+        Matches OpenSCAD render_wall: a 2D wall+lip profile polygon (filleted
+        tip, support section) is swept around the inner rectangle perimeter
+        via linear_extrude on each edge and rotate_extrude(90) at each corner.
+        The wall ring (thin ring below the lip) is built separately and unioned.
         """
         s = self.spec
         outer = self._outer_dimensions()
         wall_h = self._wall_height_mm()
-        wall_top_z = s.BASE_HEIGHT + wall_h
-
-        lip = s.STACKING_LIP_PROFILE
         r_top = s.BASE_TOP_RADIUS
-        wall_t = s.WALL_THICKNESS
-        support_h = s.STACKING_LIP_SUPPORT_HEIGHT  # 1.2
+        inner_size = [outer[0] - 2 * r_top, outer[1] - 2 * r_top]
 
-        inner_dim = [outer[0] - 2 * r_top, outer[1] - 2 * r_top]
-
-        def rr(radius):
-            """Rounded rectangle 2D shape at the given corner radius."""
-            return rounded_square(
-                [inner_dim[0] + 2 * radius, inner_dim[1] + 2 * radius],
-                max(radius, 0.01),
-                center=True,
+        # Wall ring: thin ring from z=0 to z=wall_h in local coords
+        inner_dim = [outer[0] - 2 * s.WALL_THICKNESS, outer[1] - 2 * s.WALL_THICKNESS]
+        wall_ring = (
+            rounded_square(outer, r_top, center=True).linear_extrude(height=wall_h)
+            - rounded_square(inner_dim, r_top, center=True).linear_extrude(
+                height=wall_h
             )
+        ).up(s.BASE_HEIGHT)
 
-        thin = 0.01
-        overlap = 0.001
+        # Lip: swept profile in local coords (z=0 at wall base), then move up
+        profile_pts = self._get_wall_profile_polygon()
+        lip_swept = self._sweep_lip_profile(inner_size, profile_pts)
+        lip_swept = lip_swept.up(s.BASE_HEIGHT)
 
-        r_base_offset = r_top - s.STACKING_LIP_DEPTH  # 1.15
-        r0 = r_base_offset + lip[0][0]  # 1.15 (lip inner tip)
-        r1 = r_base_offset + lip[1][0]  # 1.85
-
-        h1 = lip[1][1]  # 0.7
-        h2 = lip[2][1]  # 2.5
-
-        effective_h = self._effective_lip_height()
-
-        r_wall_inner = r_top - wall_t  # 2.8
-
-        z_sup = wall_top_z - support_h
-        z_wt = wall_top_z
-        z_h1 = wall_top_z + h1
-        z_h2 = wall_top_z + h2
-        z_h3 = wall_top_z + effective_h
-
-        def slab(r, z):
-            return rr(r).linear_extrude(height=thin).up(z)
-
-        outer_env = rr(r_top).linear_extrude(height=z_h3 - z_sup).up(z_sup)
-
-        # -- Inner envelope --
-        # Support taper and first two sections are unchanged.
-        inner_env = hull(slab(r_wall_inner, z_sup - overlap), slab(r0, z_wt))
-        inner_env = inner_env | hull(slab(r0, z_wt - overlap), slab(r1, z_h1))
-        inner_env = inner_env | rr(r1).linear_extrude(
-            height=(h2 - h1) + 2 * overlap
-        ).up(z_h1 - overlap)
-
-        arc_pts = self._lip_fillet_arc()
-        if arc_pts is not None:
-            prev_r = r1
-            prev_z = z_h2 - overlap
-            for pt in arc_pts:
-                cur_r = r_base_offset + pt[0]
-                cur_z = wall_top_z + pt[1]
-                inner_env = inner_env | hull(
-                    slab(prev_r, prev_z),
-                    slab(min(cur_r, r_top), cur_z),
-                )
-                prev_r = min(cur_r, r_top)
-                prev_z = cur_z
-        else:
-            r3 = r_base_offset + lip[3][0]
-            h3 = lip[3][1]
-            inner_env = inner_env | hull(
-                slab(r1, z_h2 - overlap),
-                slab(r3 + overlap, wall_top_z + h3 + overlap),
-            )
-
-        return outer_env - inner_env
+        return wall_ring | lip_swept
 
     # ------------------------------------------------------------------
     # Compartment cutters
