@@ -3,7 +3,7 @@
 [![CI](https://github.com/nomike/pythonscad-gridfinity/actions/workflows/ci.yml/badge.svg)](https://github.com/nomike/pythonscad-gridfinity/actions/workflows/ci.yml)
 [![PyPI](https://img.shields.io/pypi/v/pythonscad-gridfinity)](https://pypi.org/project/pythonscad-gridfinity/)
 [![Python](https://img.shields.io/pypi/pyversions/pythonscad-gridfinity)](https://pypi.org/project/pythonscad-gridfinity/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![License: BSD 3-Clause](https://img.shields.io/badge/License-BSD_3--Clause-blue.svg)](LICENSE)
 
 A Python library for generating [Gridfinity](https://gridfinity.xyz/)-compatible
 baseplates and bins using [PythonSCAD](https://pythonscad.org/).
@@ -531,4 +531,4 @@ This library would not exist without the following projects and people:
 
 ## License
 
-[MIT](LICENSE)
+[BSD 3-Clause](LICENSE)
