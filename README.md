@@ -50,11 +50,10 @@ When opening examples from a clone without installing, add `src/` to the path
 
 ### Use it as a project dependency
 
-The `v0.1.0` tag predates PyPI automation; `v0.2.0` is the first planned
-published package release. Pin it in `requirements.txt`:
+Put this in `requirements.txt`:
 
 ```text
-pythonscad-gridfinity==0.2.0
+pythonscad-gridfinity
 ```
 
 Or add it to another project's `pyproject.toml`:
@@ -62,7 +61,7 @@ Or add it to another project's `pyproject.toml`:
 ```toml
 [project]
 dependencies = [
-  "pythonscad-gridfinity==0.2.0",
+  "pythonscad-gridfinity",
 ]
 ```
 
