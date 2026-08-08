@@ -4,27 +4,31 @@ on:
   pull_request:
     types: [opened, edited, synchronize, reopened]
 
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   commitlint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           fetch-depth: 0
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-
+          persist-credentials: false
       - name: Install commitlint
+        run: npm install --no-save @commitlint/cli@21.2.0 @commitlint/config-conventional@21.2.0
+      - name: Validate pull-request commits
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
-          npm install --save-dev @commitlint/config-conventional@19 @commitlint/cli@19
-
-      - name: Validate PR commits
-        run: |
-          npx commitlint --from ${{ github.event.pull_request.base.sha }} --to ${{ github.event.pull_request.head.sha }} --verbose
-
-      - name: Validate PR title
-        run: |
-          echo "${{ github.event.pull_request.title }}" | npx commitlint --verbose
+          merge_base=$(git merge-base "$BASE_SHA" "$HEAD_SHA")
+          npx commitlint --from "$merge_base" --to "$HEAD_SHA" --verbose
+      - name: Validate pull-request title
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: printf '%s\n' "$PR_TITLE" | npx commitlint --verbose

@@ -13,6 +13,7 @@ build/
 # Virtual environments
 .venv/
 venv/
+smoke*/
 
 # IDE
 .idea/
@@ -30,3 +31,14 @@ Thumbs.db
 *.3mf
 *.off
 *.amf
+*.csg
+
+# Local comparison geometry (keep clone, ignore generated meshes)
+tests/*.stl
+tests/*.off
+tests/gridfinity-rebuilt-openscad/
+
+# Coverage
+.coverage
+htmlcov/
+.pytest_cache/

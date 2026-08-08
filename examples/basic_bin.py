@@ -4,16 +4,22 @@ Open this file in PythonSCAD to render the bins.
 The modelpath() call ensures the package is found relative to this script.
 """
 
-import sys
 import os
+import sys
+
 from openscad import *
 
 fn = 64
 
-# Add the parent directory so the package can be found
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(modelpath()))))
+sys.path.insert(
+    0,
+    os.path.join(
+        os.path.dirname(os.path.dirname(os.path.abspath(modelpath()))),
+        "src",
+    ),
+)
 
-from pythonscad_gridfinity import GridfinityBin, Compartment, HoleOptions
+from gridfinity import Compartment, GridfinityBin, HoleOptions
 
 # --- Example 1: Simple 2x1 bin, plain magnet holes (glued-in) ---
 bin_simple = GridfinityBin(

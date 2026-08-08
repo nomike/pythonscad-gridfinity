@@ -6,7 +6,7 @@ path.  This is much faster than normal printing but limits the geometry
 to single-wall features.
 
 Usage:
-    from pythonscad_gridfinity import GridfinityVaseBin
+    from gridfinity import GridfinityVaseBin
 
     v = GridfinityVaseBin(2, 1, 6)
     v.render().show()
@@ -16,14 +16,14 @@ import math
 
 from openscad import *
 
-from .spec import GridfinitySpec
-from .holes import HoleOptions, block_base_hole, hole_pattern
 from .helpers import (
-    rounded_square,
-    rounded_square_3d,
     grid_positions,
     pattern_circular,
+    rounded_square,
+    rounded_square_3d,
 )
+from .holes import HoleOptions, block_base_hole, hole_pattern
+from .spec import GridfinitySpec
 
 
 class GridfinityVaseBin:
@@ -50,6 +50,7 @@ class GridfinityVaseBin:
         enable_pinch: Pinch the top lip for added strength.
         enable_front_inset: Triangular inset at the front wall for
             strength when the scoop chamfer is present.
+
     """
 
     def __init__(
@@ -504,6 +505,7 @@ class GridfinityVaseBin:
 
         Returns:
             A 3D PythonSCAD object.
+
         """
         base = self._build_base_shell()
         walls = self._build_walls()

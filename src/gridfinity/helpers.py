@@ -6,6 +6,7 @@ chamfer cones, etc.) used by the baseplate and bin modules.
 """
 
 import math
+
 from openscad import *
 
 
@@ -22,6 +23,7 @@ def rounded_square(size, radius, center=True):
 
     Returns:
         A 2D PythonSCAD object.
+
     """
     if isinstance(size, (int, float)):
         size = [size, size]
@@ -44,6 +46,7 @@ def rounded_square_3d(size, radius, height, center_xy=True):
 
     Returns:
         A 3D PythonSCAD object.
+
     """
     return rounded_square(size, radius, center=center_xy).linear_extrude(height=height)
 
@@ -59,6 +62,7 @@ def pattern_grid(obj, grid_size, spacing, center=True):
 
     Returns:
         Union of all placed copies.
+
     """
     if isinstance(spacing, (int, float)):
         spacing = [spacing, spacing]
@@ -91,6 +95,7 @@ def pattern_circular(obj, n):
 
     Returns:
         Union of all rotated copies.
+
     """
     result = None
     for i in range(1, n + 1):
@@ -108,6 +113,7 @@ def copy_mirror(obj, axis):
 
     Returns:
         Union of the original and mirrored object.
+
     """
     return obj | obj.mirror(axis)
 
@@ -126,6 +132,7 @@ def cone(bottom_radius, angle_deg, max_height=0):
 
     Returns:
         A 3D PythonSCAD object.
+
     """
     height = math.tan(math.radians(angle_deg)) * bottom_radius
     if max_height <= 0 or height <= max_height:
@@ -152,6 +159,7 @@ def cut_chamfered_cylinder(radius, depth, chamfer_radius=0, cut_lip=False):
 
     Returns:
         A 3D PythonSCAD object centered at the origin.
+
     """
     outer_radius = radius + chamfer_radius
     body = cylinder(h=depth, r=radius).down(depth)
@@ -175,6 +183,7 @@ def grid_positions(grid_size, spacing, center=True):
 
     Yields:
         (x, y) tuples.
+
     """
     if isinstance(spacing, (int, float)):
         spacing = [spacing, spacing]

@@ -1,0 +1,11 @@
+# Gallery previews are generated locally with:
+#
+#   uv sync --all-groups
+#   pythonscad --trust-python --imgsize=640,480 \
+#     --camera=55,0,25,55,0,0,400 \
+#     scripts/render_gallery_baseplate.py -o docs/gallery/baseplate.png
+#
+# Repeat for render_gallery_bin.py and render_gallery_vase.py.
+#
+# Headless PNG export requires an OpenGL context (DISPLAY or compatible
+# offscreen setup). CI does not commit generated images.

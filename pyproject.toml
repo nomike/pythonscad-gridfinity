@@ -1,44 +1,127 @@
 [build-system]
-requires = ["setuptools>=68.0", "setuptools-scm>=8.0"]
-build-backend = "setuptools.build_meta"
+requires = ["hatchling==1.27.0"]
+build-backend = "hatchling.build"
 
 [project]
 name = "pythonscad-gridfinity"
 version = "0.1.0"
 description = "Gridfinity baseplates and bins for PythonSCAD"
 readme = "README.md"
-license = {text = "MIT"}
 requires-python = ">=3.10"
+license = "MIT"
 authors = [
-    {name = "nomike", email = "nomike@nomike.com"},
+  { name = "nomike", email = "nomike@nomike.com" },
 ]
-keywords = ["gridfinity", "pythonscad", "openscad", "3d-printing", "parametric", "cad"]
+keywords = ["3d-printing", "cad", "gridfinity", "openscad", "pythonscad"]
 classifiers = [
-    "Development Status :: 3 - Alpha",
-    "Intended Audience :: Manufacturing",
-    "License :: OSI Approved :: MIT License",
-    "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.10",
-    "Programming Language :: Python :: 3.11",
-    "Programming Language :: Python :: 3.12",
-    "Programming Language :: Python :: 3.13",
-    "Topic :: Scientific/Engineering",
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Developers",
+  "Intended Audience :: Manufacturing",
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: 3.14",
+  "Topic :: Multimedia :: Graphics :: 3D Modeling",
+  "Topic :: Scientific/Engineering",
+]
+dependencies = [
+  "pythonscad>=1.1.0",
 ]
 
 [project.urls]
 Homepage = "https://github.com/nomike/pythonscad-gridfinity"
+Documentation = "https://github.com/nomike/pythonscad-gridfinity#readme"
 Repository = "https://github.com/nomike/pythonscad-gridfinity"
 Issues = "https://github.com/nomike/pythonscad-gridfinity/issues"
+Changelog = "https://github.com/nomike/pythonscad-gridfinity/blob/main/CHANGELOG.md"
 
-[tool.ruff.lint]
-ignore = [
-    "F403",  # `from openscad import *` is the standard PythonSCAD usage
-    "F405",  # Names from star imports are resolved at runtime by PythonSCAD
+[dependency-groups]
+dev = [
+  "build==1.5.0",
+  "hatchling==1.27.0",
+  "pre-commit==4.6.1",
+  "pyright==1.1.411",
+  "pytest==9.1.1",
+  "pytest-cov==7.1.0",
+  "ruff==0.16.2",
+  "twine==7.0.0",
 ]
 
-[tool.ruff.lint.per-file-ignores]
-"examples/*" = ["E402"]  # Examples need sys.path setup before imports
-"test_*.py" = ["E402"]
+[tool.hatch.build.targets.wheel]
+packages = ["src/gridfinity"]
 
-[tool.setuptools.packages.find]
-include = ["pythonscad_gridfinity*"]
+[tool.hatch.build.targets.sdist]
+include = [
+  "/src",
+  "/tests",
+  "/scripts",
+  "/LICENSE",
+  "/README.md",
+  "/CHANGELOG.md",
+  "/CONTRIBUTING.md",
+  "/SECURITY.md",
+  "/VERSIONING.md",
+  "/PUBLISHING.md",
+  "/pyproject.toml",
+]
+
+[tool.pytest.ini_options]
+addopts = "--strict-config --strict-markers --cov=gridfinity --cov-report=term-missing --ignore=tests/gridfinity-rebuilt-openscad"
+testpaths = ["tests"]
+
+[tool.coverage.run]
+branch = true
+source = ["gridfinity"]
+omit = [
+  "src/gridfinity/helpers.py",
+  "src/gridfinity/holes.py",
+  "src/gridfinity/baseplate.py",
+  "src/gridfinity/bin.py",
+  "src/gridfinity/vase.py",
+]
+
+[tool.coverage.report]
+fail_under = 100
+show_missing = true
+
+[tool.pyright]
+include = ["src/gridfinity/spec.py", "src/gridfinity/__init__.py", "tests/test_gridfinity.py"]
+exclude = ["tests/gridfinity-rebuilt-openscad/**"]
+pythonVersion = "3.10"
+stubPath = "typings"
+typeCheckingMode = "basic"
+reportMissingTypeStubs = false
+
+[[tool.pyright.executionEnvironments]]
+root = "src/gridfinity"
+reportUndefinedVariable = "none"
+reportUnknownMemberType = "none"
+reportUnknownArgumentType = "none"
+reportUnknownVariableType = "none"
+
+[tool.ruff]
+line-length = 88
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["A", "B", "C4", "D", "E", "F", "FA", "I", "N", "PERF", "PIE", "PT", "RUF", "SIM", "UP", "W"]
+ignore = ["D203", "D213"]
+
+[tool.ruff.lint.per-file-ignores]
+"src/gridfinity/**" = [
+  "D105",
+  "D107",
+  "D401",
+  "F403",
+  "F405",
+  "RUF002",
+  "RUF012",
+  "SIM102",
+  "SIM108",
+]
+"examples/**" = ["E402", "F403", "F405"]
+"scripts/**" = ["E402", "F403", "F405"]
+"tests/**" = ["ANN", "D"]

@@ -4,7 +4,7 @@ Creates parametric Gridfinity-compatible bins with configurable
 compartments, scoops, label tabs, stacking lip, and bottom holes.
 
 Usage:
-    from pythonscad_gridfinity import GridfinityBin, HoleOptions
+    from gridfinity import GridfinityBin, HoleOptions
 
     b = GridfinityBin(3, 2, 6)
     b.render().show()
@@ -20,7 +20,7 @@ Usage:
     b.render().show()
 
     # Custom compartment layout
-    from pythonscad_gridfinity import Compartment
+    from gridfinity import Compartment
     b = GridfinityBin(
         3, 2, 6,
         compartments=[
@@ -38,15 +38,14 @@ from dataclasses import dataclass
 
 from openscad import *
 
-from .spec import GridfinitySpec
-from .holes import block_base_hole, hole_pattern
 from .helpers import (
+    cut_chamfered_cylinder,
+    grid_positions,
     rounded_square,
     rounded_square_3d,
-    grid_positions,
-    cut_chamfered_cylinder,
 )
-
+from .holes import block_base_hole, hole_pattern
+from .spec import GridfinitySpec
 
 TAB_STYLES = ("full", "auto", "left", "center", "right", "none")
 LIP_STYLES = ("normal", "reduced", "none", "subtractive")
@@ -72,6 +71,7 @@ class Compartment:
         h: Fractional grid depth (Y).
         scoop: Scoop weight 0.0–1.0.  None inherits from the bin.
         tab_style: Tab placement.  None inherits from the bin.
+
     """
 
     x: float
@@ -144,6 +144,7 @@ class GridfinityBin:
             unit for secure baseplate attachment.
         scoop_chamfer: If True, add a 45-degree chamfer at the top edge
             of the scoop for easier part removal.
+
     """
 
     PLACE_TAB_OPTIONS = ("everywhere", "top_left")
@@ -281,6 +282,7 @@ class GridfinityBin:
 
         Returns:
             [width, depth] in mm.
+
         """
         s = self.spec
         cell = self._cell_size
@@ -301,6 +303,7 @@ class GridfinityBin:
 
         Returns:
             A 3D PythonSCAD object centered in XY, bottom at z=0.
+
         """
         s = self.spec
         profile = s.BASE_PROFILE
@@ -375,6 +378,7 @@ class GridfinityBin:
 
         Returns:
             A 3D PythonSCAD object centered in XY, bottom at z=0.
+
         """
         s = self.spec
         cell = self._cell_size
@@ -488,6 +492,7 @@ class GridfinityBin:
 
         Returns:
             A 3D PythonSCAD object centered in XY, bottom at BASE_HEIGHT.
+
         """
         s = self.spec
         outer = self._outer_dimensions()
@@ -510,6 +515,7 @@ class GridfinityBin:
 
         Returns:
             A 3D PythonSCAD object positioned at the correct z height.
+
         """
         s = self.spec
         outer = self._outer_dimensions()
@@ -611,6 +617,7 @@ class GridfinityBin:
 
         Returns:
             A 3D PythonSCAD object centered in XY, bottom at z=0.
+
         """
         s = self.spec
         r = s.FILLET_RADIUS  # 2.8
@@ -688,6 +695,7 @@ class GridfinityBin:
 
         Returns:
             A 3D PythonSCAD object centered in XY at z=0, or None.
+
         """
         s = self.spec
         r = s.FILLET_RADIUS
@@ -733,6 +741,7 @@ class GridfinityBin:
 
         Returns:
             A 3D PythonSCAD object positioned inside the cutter, or None.
+
         """
         s = self.spec
         tab_depth = s.TAB_DEPTH
@@ -799,6 +808,7 @@ class GridfinityBin:
 
         Returns:
             A 3D PythonSCAD object centered at the origin.
+
         """
         s = self.spec
         d = s.THUMBSCREW_DIAMETER
@@ -985,6 +995,7 @@ class GridfinityBin:
 
         Returns:
             A 3D PythonSCAD object representing the complete bin.
+
         """
         s = self.spec
         tol = s.TOLERANCE
