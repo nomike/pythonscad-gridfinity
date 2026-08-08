@@ -691,26 +691,31 @@ class GridfinityBin:
 
         return top | right | bottom | left | c1 | c2 | c3 | c4
 
-    def _build_lip(self):
+    def _build_lip(self, wall_ring_height=None):
         """Build the stacking lip at the top of the bin.
 
         Matches OpenSCAD render_wall: a 2D wall+lip profile polygon (filleted
         tip, support section) is swept around the inner rectangle perimeter
         via linear_extrude on each edge and rotate_extrude(90) at each corner.
         The wall ring (thin ring below the lip) is built separately and unioned.
+
+        Args:
+            wall_ring_height: If set, use this instead of wall_h for the ring
+                height (e.g. wall_h - 0.001 to avoid z-fighting with the lip).
         """
         s = self.spec
         outer = self._outer_dimensions()
         wall_h = self._wall_height_mm()
+        ring_h = wall_h if wall_ring_height is None else wall_ring_height
         r_top = s.BASE_TOP_RADIUS
         inner_size = [outer[0] - 2 * r_top, outer[1] - 2 * r_top]
 
-        # Wall ring: thin ring from z=0 to z=wall_h in local coords
+        # Wall ring: thin ring from z=0 to z=ring_h in local coords
         inner_dim = [outer[0] - 2 * s.WALL_THICKNESS, outer[1] - 2 * s.WALL_THICKNESS]
         wall_ring = (
-            rounded_square(outer, r_top, center=True).linear_extrude(height=wall_h)
+            rounded_square(outer, r_top, center=True).linear_extrude(height=ring_h)
             - rounded_square(inner_dim, r_top, center=True).linear_extrude(
-                height=wall_h
+                height=ring_h
             )
         ).up(s.BASE_HEIGHT)
 
@@ -1133,39 +1138,110 @@ class GridfinityBin:
         cell = self._cell_size
         outer = self._outer_dimensions()
         wall_h = self._wall_height_mm()
-        wall_top_z = s.BASE_HEIGHT + wall_h
 
         # Floor level (inside the bin, top of base)
         floor_z = s.BASE_HEIGHT
         # Compartment height (from floor to wall top)
         comp_h = wall_h - s.FLOOR_THICKNESS
+        # Infill height: when lip present, OpenSCAD stops at wall_top - support
+        fill_height = wall_h - (
+            s.STACKING_LIP_SUPPORT_HEIGHT if self.lip_style == "normal" else 0
+        )
 
         # ---- 1. Base ----
         base = self._build_base_lite() if self.lite else self._build_base()
 
-        # ---- 2. Outer body ----
-        body = self._build_body()
-
-        # ---- 3. Stacking lip ----
-        if self.lip_style == "normal":
-            lip = self._build_lip()
-            body = body | lip
-        elif self.lip_style == "subtractive":
-            # Remove the lip zone from the top of the bin
-            lip_cutter = self._build_lip()
-            body = body - lip_cutter
-
-        # ---- 4. Subtract compartment cutters ----
-        # When div_x/div_y are None (default) and no compartments or
-        # cut_cylinders are set, the bin is solid -- matching the
-        # OpenSCAD bin_render() behaviour without children.
+        # ---- 2. Body: match OpenSCAD exactly ----
+        # OpenSCAD: bin_render_wall (wall+lip) then difference(union(
+        #   bin_render_infill (block from BASE_HEIGHT, height=fill_height),
+        #   base?), children()). So infill is a separate block that only
+        # extends to fill_height; no pocket subtraction, so no z-fighting.
         has_compartments = not self.solid and (
             self.div_x is not None
             or self.div_y is not None
             or self.compartments is not None
             or self.cut_cylinders
         )
-        if has_compartments:
+        if self.lip_style == "normal":
+            infill_dim = [outer[0] - tol, outer[1] - tol]
+            infill_block = rounded_square_3d(
+                infill_dim,
+                s.BASE_TOP_RADIUS,
+                fill_height,
+                center_xy=True,
+            ).up(floor_z)
+            if has_compartments:
+                nx = self.div_x if self.div_x is not None else 1
+                ny = self.div_y if self.div_y is not None else 1
+                saved_div = (self.div_x, self.div_y)
+                self.div_x, self.div_y = nx, ny
+                d_magic = -2 * s.FIT_CLEARANCE - 2 * s.WALL_THICKNESS + s.DIVIDER_WIDTH
+                gx, gy = self.grid_x, self.grid_y
+                # OpenSCAD positions children at BASE_HEIGHT+fill_height; cutters
+                # extend down through the infill only (7 to 12.8).
+                cutter_z = floor_z
+                if self.cut_cylinders:
+                    infill_block = self._cut_cylinder_compartments(
+                        infill_block, fill_height, d_magic, gx, gy, cell, cutter_z
+                    )
+                elif self.compartments is not None:
+                    infill_block = self._cut_custom_compartments(
+                        infill_block, fill_height, d_magic, gx, gy, cell, cutter_z
+                    )
+                else:
+                    infill_block = self._cut_grid_compartments(
+                        infill_block, fill_height, d_magic, gx, gy, cell, cutter_z
+                    )
+                self.div_x, self.div_y = saved_div
+            # Match OpenSCAD: combine mesh (rendered infill) + CSG (wall+lip) to
+            # avoid z-fighting in F5 preview. Fall back to CSG union with gap if
+            # mesh() fails (e.g. unsupported geometry).
+            mesh_result = infill_block.mesh(triangulate=True)
+            if isinstance(mesh_result, tuple) and len(mesh_result) == 2:
+                pts, faces = mesh_result
+                if pts and faces:
+                    infill_mesh = polyhedron(pts, faces)
+                    body = infill_mesh | self._build_lip()
+                else:
+                    _apply_zfight_fallback()
+            else:
+                _apply_zfight_fallback()
+
+            def _apply_zfight_fallback():
+                nonlocal body
+                ZFIGHT_GAP = 0.1
+                infill_short = rounded_square_3d(
+                    infill_dim,
+                    s.BASE_TOP_RADIUS,
+                    fill_height - ZFIGHT_GAP,
+                    center_xy=True,
+                ).up(floor_z)
+                if has_compartments:
+                    self.div_x, self.div_y = nx, ny
+                    if self.cut_cylinders:
+                        infill_short = self._cut_cylinder_compartments(
+                            infill_short, fill_height, d_magic, gx, gy, cell, cutter_z
+                        )
+                    elif self.compartments is not None:
+                        infill_short = self._cut_custom_compartments(
+                            infill_short, fill_height, d_magic, gx, gy, cell, cutter_z
+                        )
+                    else:
+                        infill_short = self._cut_grid_compartments(
+                            infill_short, fill_height, d_magic, gx, gy, cell, cutter_z
+                        )
+                    self.div_x, self.div_y = saved_div
+                body = infill_short | self._build_lip(
+                    wall_ring_height=wall_h - ZFIGHT_GAP
+                )
+        else:
+            body = self._build_body()
+            if self.lip_style == "subtractive":
+                lip_cutter = self._build_lip()
+                body = body - lip_cutter
+
+        # ---- 3. Compartment cutters (when no lip) ----
+        if has_compartments and self.lip_style != "normal":
             nx = self.div_x if self.div_x is not None else 1
             ny = self.div_y if self.div_y is not None else 1
             saved_div = (self.div_x, self.div_y)
@@ -1192,8 +1268,8 @@ class GridfinityBin:
 
         elif self.solid and self.solid_ratio < 1.0:
             # Partially filled solid: cut out the empty portion at the top
-            fill_h = comp_h * self.solid_ratio
-            empty_h = comp_h - fill_h
+            fill_h = fill_height * self.solid_ratio
+            empty_h = fill_height - fill_h
             if empty_h > 0.01:
                 inner = [
                     outer[0] - 2 * s.WALL_THICKNESS,
@@ -1204,28 +1280,8 @@ class GridfinityBin:
                     s.FILLET_RADIUS,
                     empty_h + tol,
                     center_xy=True,
-                ).up(wall_top_z - empty_h)
+                ).up(floor_z + fill_height - empty_h)
                 body = body - empty_cut
-
-        # Solid bins with a stacking lip: cut the support zone pocket
-        # so the infill ends at wall_top - STACKING_LIP_SUPPORT_HEIGHT,
-        # leaving only the thin wall ring in the lip support zone.
-        # This matches OpenSCAD's bin_render_infill / bin_render_wall
-        # separation where the infill never fills the support zone.
-        if not has_compartments and self.lip_style == "normal":
-            sup_h = s.STACKING_LIP_SUPPORT_HEIGHT
-            if sup_h > 0 and wall_h > sup_h:
-                inner_cut_dim = [
-                    outer[0] - 2 * s.WALL_THICKNESS,
-                    outer[1] - 2 * s.WALL_THICKNESS,
-                ]
-                support_pocket = rounded_square_3d(
-                    inner_cut_dim,
-                    s.BASE_TOP_RADIUS,
-                    sup_h + tol,
-                    center_xy=True,
-                ).up(wall_top_z - sup_h)
-                body = body - support_pocket
 
         # ---- 5. Union body + base ----
         result = body | base
