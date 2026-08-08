@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 This file is maintained by release-please. The initial release is 0.1.0.
 
+## [0.2.1](https://github.com/nomike/pythonscad-gridfinity/compare/v0.2.0...v0.2.1) (2026-08-08)
+
+
+### Bug Fixes
+
+* **ci:** allow release dependency resolution ([#11](https://github.com/nomike/pythonscad-gridfinity/issues/11)) ([a9d2f67](https://github.com/nomike/pythonscad-gridfinity/commit/a9d2f6738cff5a2612ae1a3e34e5af6c467101d5))
+
 ## [0.2.0](https://github.com/nomike/pythonscad-gridfinity/compare/v0.1.0...v0.2.0) (2026-08-08)
 
 
