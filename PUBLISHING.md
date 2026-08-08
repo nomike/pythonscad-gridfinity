@@ -46,8 +46,9 @@ publisher scoped to this repository, workflow, and environment:
 - Environment: `testpypi`
 
 The pending publisher can create the project on its first successful upload.
-Every release-please branch update is built as a unique development version
-with `skip-existing` by the workflow run on `main`.
+When a release proposal branch exists, the workflow run on `main` builds it as
+a unique development version with `skip-existing`. Development publishing is
+skipped when there is no release proposal.
 
 ## One-time PyPI setup
 

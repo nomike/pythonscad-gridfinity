@@ -18,11 +18,12 @@ GitHub release. The same workflow builds one wheel and source distribution,
 attaches them to the GitHub release, publishes to TestPyPI, and then publishes
 to PyPI after the configured environment approval.
 
-Ordinary pushes to `main` update the release-please branch. The publishing
-workflow checks out that branch and builds its proposed release version as a
-unique `.devN` package for TestPyPI. Package index files are immutable, so the
-workflow never attempts to overwrite an existing version on PyPI; TestPyPI
-development uploads use `skip-existing`.
+When a push to `main` creates or updates the release-please proposal branch, the
+publishing workflow checks out that branch and builds its proposed release
+version as a unique `.devN` package for TestPyPI. If no release proposal exists,
+the development publishing jobs are skipped. Package index files are immutable,
+so the workflow never attempts to overwrite an existing version on PyPI;
+TestPyPI development uploads use `skip-existing`.
 
 The `v0.1.0` tag is the pre-packaging source baseline. The first release built
 and published by this automation will be `v0.2.0`.

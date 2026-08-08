@@ -41,9 +41,30 @@ jobs:
           config-file: .release-please-config.json
           manifest-file: .release-please-manifest.json
 
-  build-development:
+  find-development-branch:
     needs: release-please
     if: needs.release-please.outputs.release-created != 'true'
+    runs-on: ubuntu-latest
+    outputs:
+      exists: ${{ steps.branch.outputs.exists }}
+    steps:
+      - id: branch
+        name: Check for a release proposal
+        env:
+          BRANCH: ${{ env.RELEASE_PLEASE_BRANCH }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          if git ls-remote --exit-code --heads \
+            "https://github.com/${REPOSITORY}.git" "refs/heads/${BRANCH}" \
+            >/dev/null; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  build-development:
+    needs: [release-please, find-development-branch]
+    if: needs.find-development-branch.outputs.exists == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
