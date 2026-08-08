@@ -4,16 +4,23 @@ Open this file in PythonSCAD to render the baseplates.
 The modelpath() call ensures the package is found relative to this script.
 """
 
-import sys
 import os
+import sys
+
 from openscad import *
 
 fn = 64
 
-# Add the parent directory so the package can be found
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(modelpath()))))
+# Add src/ so the package can be found when running from a clone
+sys.path.insert(
+    0,
+    os.path.join(
+        os.path.dirname(os.path.dirname(os.path.abspath(modelpath()))),
+        "src",
+    ),
+)
 
-from pythonscad_gridfinity import GridfinityBaseplate, HoleOptions
+from gridfinity import GridfinityBaseplate, HoleOptions
 
 # --- Example 1: Simple thin baseplate (1x1) ---
 bp_thin = GridfinityBaseplate(1, 1, style="thin")

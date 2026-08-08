@@ -1,46 +1,14 @@
 extends:
-  - '@commitlint/config-conventional'
+  - "@commitlint/config-conventional"
 
 rules:
+  # Conventional Commits does not prescribe subject capitalization, and
+  # Dependabot generates sentence-case subjects.
+  subject-case: [0]
+  # Dependabot bodies contain generated URLs and metadata lines.
+  body-max-line-length: [0]
+  header-max-length: [2, always, 100]
   type-enum:
-    - 2  # level: error
-    - always
-    - - build
-      - chore
-      - ci
-      - docs
-      - feat
-      - fix
-      - perf
-      - refactor
-      - revert
-      - style
-      - test
-
-  scope-empty:
-    - 0  # level: disabled
-
-  subject-empty:
-    - 2  # level: error
-    - never
-
-  subject-full-stop:
-    - 2
-    - never
-    - '.'
-
-  subject-case:
-    - 0
-
-  header-max-length:
     - 2
     - always
-    - 100
-
-  body-leading-blank:
-    - 1  # level: warning
-    - always
-
-  footer-leading-blank:
-    - 1
-    - always
+    - [build, chore, ci, docs, feat, fix, perf, refactor, revert, style, test]

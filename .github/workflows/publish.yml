@@ -1,0 +1,191 @@
+# Publishing prerequisites:
+# 1. Create GitHub environments named "testpypi" and "pypi".
+# 2. Register trusted publishers on TestPyPI and PyPI with:
+#    owner=nomike, repository=pythonscad-gridfinity, workflow=publish.yml,
+#    and the corresponding environment name.
+# 3. Allow GitHub Actions to create pull requests for release-please.
+# No package-index token is stored as a GitHub secret; publishing uses OIDC.
+name: Release and publish
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publish-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release-please:
+    if: >-
+      github.repository == 'nomike/pythonscad-gridfinity' &&
+      github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    outputs:
+      release-created: ${{ steps.release.outputs.release_created }}
+      tag-name: ${{ steps.release.outputs.tag_name }}
+    steps:
+      - id: release
+        uses: googleapis/release-please-action@0dfd8538845b8e92600d271a895a5372865d4062 # v5
+        with:
+          config-file: .release-please-config.json
+          manifest-file: .release-please-manifest.json
+
+  build-development:
+    needs: release-please
+    if: needs.release-please.outputs.release-created != 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+        with:
+          python-version: "3.14"
+      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9
+      - name: Test the locked source tree
+        run: |
+          uv sync --frozen --all-groups
+          uv run pytest
+          uv run pyright
+      - name: Set unique development version
+        env:
+          RUN_NUMBER: ${{ github.run_number }}
+        run: |
+          python - <<'PY'
+          import os
+          import pathlib
+          import re
+
+          path = pathlib.Path("pyproject.toml")
+          content = path.read_text(encoding="utf-8")
+          match = re.search(r'(?m)^version = "(\d+)\.(\d+)\.(\d+)"$', content)
+          if match is None:
+              raise SystemExit("Could not find a stable project version")
+          major, minor, patch = map(int, match.groups())
+          version = f"{major}.{minor}.{patch + 1}.dev{os.environ['RUN_NUMBER']}"
+          content = content[:match.start()] + f'version = "{version}"' + content[match.end():]
+          path.write_text(content, encoding="utf-8")
+          print(f"Building development version {version}")
+          PY
+      - name: Build and verify distributions
+        run: |
+          uv build
+          uvx --from twine==7.0.0 twine check dist/*
+          uv venv smoke
+          uv pip install --python smoke/bin/python dist/*.whl
+          smoke/bin/python -c \
+            "import gridfinity; print(gridfinity.__version__)"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: development-distributions
+          path: dist/
+          if-no-files-found: error
+
+  publish-development:
+    needs: build-development
+    runs-on: ubuntu-latest
+    environment: testpypi
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: development-distributions
+          path: dist/
+      - name: Publish development version to TestPyPI
+        uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # release/v1
+        with:
+          repository-url: https://test.pypi.org/legacy/
+          skip-existing: true
+
+  build-release:
+    needs: release-please
+    if: needs.release-please.outputs.release-created == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ needs.release-please.outputs.tag-name }}
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+        with:
+          python-version: "3.14"
+      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9
+      - name: Test the release source tree
+        run: |
+          uv lock --offline
+          uv sync --frozen --all-groups
+          uv run pytest
+          uv run pyright
+      - name: Build and verify distributions
+        run: |
+          uv build
+          uvx --from twine==7.0.0 twine check dist/*
+          uv venv smoke
+          uv pip install --python smoke/bin/python dist/*.whl
+          smoke/bin/python -c \
+            "import gridfinity; print(gridfinity.__version__)"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: release-distributions
+          path: dist/
+          if-no-files-found: error
+
+  attach-release-assets:
+    needs: [release-please, build-release]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: release-distributions
+          path: dist/
+      - name: Attach wheel and source distribution
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
+        with:
+          tag_name: ${{ needs.release-please.outputs.tag-name }}
+          files: dist/*
+          fail_on_unmatched_files: true
+
+  publish-release-testpypi:
+    needs: build-release
+    runs-on: ubuntu-latest
+    environment: testpypi
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: release-distributions
+          path: dist/
+      - name: Publish release to TestPyPI
+        uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # release/v1
+        with:
+          repository-url: https://test.pypi.org/legacy/
+          skip-existing: true
+
+  publish-release-pypi:
+    needs: [build-release, publish-release-testpypi, attach-release-assets]
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: release-distributions
+          path: dist/
+      - name: Publish release to PyPI
+        uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # release/v1

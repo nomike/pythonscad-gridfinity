@@ -7,15 +7,22 @@ continuous spiral path, resulting in much faster print times.
 Open this file in PythonSCAD to render the bins.
 """
 
-import sys
 import os
+import sys
+
 from openscad import *
 
 fn = 64
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(modelpath()))))
+sys.path.insert(
+    0,
+    os.path.join(
+        os.path.dirname(os.path.dirname(os.path.abspath(modelpath()))),
+        "src",
+    ),
+)
 
-from pythonscad_gridfinity import GridfinityVaseBin
+from gridfinity import GridfinityVaseBin
 
 # --- Example 1: Simple 1x1 vase bin ---
 vase_simple = GridfinityVaseBin(1, 1, 6)

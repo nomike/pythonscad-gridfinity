@@ -15,8 +15,8 @@ from dataclasses import dataclass
 
 from openscad import *
 
-from .spec import GridfinitySpec
 from .helpers import cone
+from .spec import GridfinitySpec
 
 
 @dataclass
@@ -31,6 +31,7 @@ class HoleOptions:
         supportless: Modify the hole so it prints without supports.
         refined_hole: Use the Gridfinity Refined side-insert style.
                       Mutually exclusive with magnet_hole.
+
     """
 
     magnet_hole: bool = False
@@ -64,6 +65,7 @@ def ribbed_circle(outer_radius, inner_radius, ribs, fn=256):
 
     Returns:
         A 2D PythonSCAD polygon.
+
     """
     wave_range = (outer_radius - inner_radius) / 2
     wave_center = inner_radius + wave_range
@@ -91,6 +93,7 @@ def ribbed_cylinder(outer_radius, inner_radius, height, ribs, fn=256):
 
     Returns:
         A 3D PythonSCAD object.
+
     """
     return ribbed_circle(outer_radius, inner_radius, ribs, fn=fn).linear_extrude(
         height=height
@@ -115,6 +118,7 @@ def make_hole_printable(inner_radius, outer_radius, outer_height, layers=2, spec
 
     Returns:
         A 3D PythonSCAD object to subtract from the hole.
+
     """
     if spec is None:
         spec = GridfinitySpec()
@@ -165,6 +169,7 @@ def _magnet_hole_body(spec, options):
 
     Returns:
         A 3D PythonSCAD object, or None if magnet_hole is disabled.
+
     """
     if not options.magnet_hole:
         return None
@@ -205,6 +210,7 @@ def _screw_hole_body(spec, options):
 
     Returns:
         A 3D PythonSCAD object, or None if screw_hole is disabled.
+
     """
     if not options.screw_hole:
         return None
@@ -242,6 +248,7 @@ def refined_hole(spec=None):
 
     Returns:
         A 3D PythonSCAD object (to be subtracted from the base).
+
     """
     if spec is None:
         spec = GridfinitySpec()
@@ -288,6 +295,7 @@ def block_base_hole(options, spec=None):
 
     Returns:
         A 3D PythonSCAD object, or None if no holes are enabled.
+
     """
     if spec is None:
         spec = GridfinitySpec()
@@ -332,6 +340,7 @@ def hole_pattern(obj, spec=None):
 
     Returns:
         Union of four copies of the object.
+
     """
     if spec is None:
         spec = GridfinitySpec()

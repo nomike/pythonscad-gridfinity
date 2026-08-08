@@ -5,7 +5,7 @@ multiple styles (thin, weighted, skeletonized, screw-together) and
 configurable magnet/screw holes.
 
 Usage:
-    from pythonscad_gridfinity import GridfinityBaseplate, HoleOptions
+    from gridfinity import GridfinityBaseplate, HoleOptions
 
     bp = GridfinityBaseplate(4, 3)
     bp.render().show()
@@ -21,15 +21,14 @@ Usage:
 
 from openscad import *
 
-from .spec import GridfinitySpec
-from .holes import block_base_hole, hole_pattern, make_hole_printable
 from .helpers import (
-    rounded_square,
+    cone,
     grid_positions,
     pattern_circular,
-    cone,
+    rounded_square,
 )
-
+from .holes import block_base_hole, hole_pattern, make_hole_printable
+from .spec import GridfinitySpec
 
 # Valid baseplate style names
 BASEPLATE_STYLES = (
@@ -70,6 +69,7 @@ class GridfinityBaseplate:
         screw_head_diameter: Head diameter for screw-together (default 5.0).
         screw_spacing: Spacing between screw channels (default 0.5).
         n_screws: Number of screws per grid edge (1-3, default 1).
+
     """
 
     def __init__(
@@ -150,6 +150,7 @@ class GridfinityBaseplate:
 
         Returns:
             (grid_size, size_mm, padding_mm) where each is [x, y, z].
+
         """
         s = self.spec
         cell_size = s.GRID_SIZE
@@ -187,6 +188,7 @@ class GridfinityBaseplate:
 
         Returns:
             A 3D PythonSCAD object centered in XY, bottom at z=0.
+
         """
         s = self.spec
         if size is None:
@@ -265,6 +267,7 @@ class GridfinityBaseplate:
 
         Returns:
             A 3D PythonSCAD object positioned at the origin corner.
+
         """
         s = self.spec
         r = s.BASEPLATE_OUTER_RADIUS
@@ -284,6 +287,7 @@ class GridfinityBaseplate:
 
         Returns:
             A 3D PythonSCAD object centered in XY.
+
         """
         s = self.spec
         # Central rectangular cutout
@@ -326,6 +330,7 @@ class GridfinityBaseplate:
 
         Returns:
             A 2D PythonSCAD object centered at origin.
+
         """
         s = self.spec
         if cell_size is None:
@@ -393,6 +398,7 @@ class GridfinityBaseplate:
 
         Returns:
             A 3D PythonSCAD object, or None.
+
         """
         s = self.spec
         cell_size = s.GRID_SIZE
@@ -440,6 +446,7 @@ class GridfinityBaseplate:
 
         Returns:
             A 3D PythonSCAD object representing the complete baseplate.
+
         """
         s = self.spec
         cell_size = s.GRID_SIZE
