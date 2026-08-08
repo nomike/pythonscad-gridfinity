@@ -29,7 +29,7 @@ pythonscad --trust-python --backend=Manifold \
 - **Python:** 3.10+
 
 The library imports `gridfinity` in PythonSCAD scripts. Geometry is built with
-PythonSCAD's `openscad` module (`from openscad import *` in examples).
+PythonSCAD's `pythonscad` module (`from pythonscad import *` in examples).
 
 ## Installation
 
@@ -69,7 +69,7 @@ dependencies = [
 ## Usage
 
 ```python
-from openscad import *
+from pythonscad import *
 from gridfinity import GridfinityBaseplate, GridfinityBin, HoleOptions
 
 bp = GridfinityBaseplate(2, 2, style="weighted",
@@ -168,7 +168,7 @@ When not using `pip install`, add the `src/` directory from a clone:
 ```python
 import sys
 import os
-from openscad import *
+from pythonscad import *
 
 sys.path.insert(0, os.path.join("/path/to/pythonscad-gridfinity", "src"))
 
@@ -181,7 +181,7 @@ If your script lives inside the repository (e.g. in `examples/`), use
 ```python
 import sys
 import os
-from openscad import *
+from pythonscad import *
 
 root = os.path.dirname(os.path.dirname(os.path.abspath(modelpath())))
 sys.path.insert(0, os.path.join(root, "src"))
@@ -194,7 +194,7 @@ from gridfinity import GridfinityBaseplate, HoleOptions
 ### Thin baseplate (1 x 1)
 
 ```python
-from openscad import *
+from pythonscad import *
 from gridfinity import GridfinityBaseplate
 
 bp = GridfinityBaseplate(1, 1, style="thin")
