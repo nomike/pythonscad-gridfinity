@@ -29,10 +29,8 @@ Publishing jobs are scoped narrowly:
   dispatch of the same workflow) and use protected environments.
 - Pull-request workflows never publish and never receive `id-token: write`.
 
-For development uploads, the workflow run is triggered on `main` and checks out
-`release-please--branches--main--components--pythonscad-gridfinity` before
-building. GitHub environment deployment rules evaluate the workflow run ref,
-not the checked-out ref, so the `testpypi` environment must allow `main`.
+Development uploads are built directly from `main`. The `testpypi` environment
+must therefore allow deployments from `main`.
 
 ## One-time TestPyPI setup
 
@@ -46,9 +44,8 @@ publisher scoped to this repository, workflow, and environment:
 - Environment: `testpypi`
 
 The pending publisher can create the project on its first successful upload.
-When a release proposal branch exists, the workflow run on `main` builds it as
-a unique development version with `skip-existing`. Development publishing is
-skipped when there is no release proposal.
+Every non-release push to `main` is built as a unique next-patch development
+version with `skip-existing`.
 
 ## One-time PyPI setup
 

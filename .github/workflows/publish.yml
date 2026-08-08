@@ -15,9 +15,6 @@ on:
 permissions:
   contents: read
 
-env:
-  RELEASE_PLEASE_BRANCH: release-please--branches--main--components--pythonscad-gridfinity
-
 concurrency:
   group: publish-${{ github.ref }}
   cancel-in-progress: false
@@ -41,35 +38,13 @@ jobs:
           config-file: .release-please-config.json
           manifest-file: .release-please-manifest.json
 
-  find-development-branch:
+  build-development:
     needs: release-please
     if: needs.release-please.outputs.release-created != 'true'
-    runs-on: ubuntu-latest
-    outputs:
-      exists: ${{ steps.branch.outputs.exists }}
-    steps:
-      - id: branch
-        name: Check for a release proposal
-        env:
-          BRANCH: ${{ env.RELEASE_PLEASE_BRANCH }}
-          REPOSITORY: ${{ github.repository }}
-        run: |
-          if git ls-remote --exit-code --heads \
-            "https://github.com/${REPOSITORY}.git" "refs/heads/${BRANCH}" \
-            >/dev/null; then
-            echo "exists=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "exists=false" >> "$GITHUB_OUTPUT"
-          fi
-
-  build-development:
-    needs: [release-please, find-development-branch]
-    if: needs.find-development-branch.outputs.exists == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          ref: ${{ env.RELEASE_PLEASE_BRANCH }}
           persist-credentials: false
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
         with:
@@ -95,7 +70,7 @@ jobs:
           if match is None:
               raise SystemExit("Could not find a stable project version")
           major, minor, patch = map(int, match.groups())
-          version = f"{major}.{minor}.{patch}.dev{os.environ['RUN_NUMBER']}"
+          version = f"{major}.{minor}.{patch + 1}.dev{os.environ['RUN_NUMBER']}"
           content = content[:match.start()] + f'version = "{version}"' + content[match.end():]
           path.write_text(content, encoding="utf-8")
           print(f"Building development version {version}")
