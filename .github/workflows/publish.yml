@@ -15,6 +15,9 @@ on:
 permissions:
   contents: read
 
+env:
+  RELEASE_PLEASE_BRANCH: release-please--branches--main--components--pythonscad-gridfinity
+
 concurrency:
   group: publish-${{ github.ref }}
   cancel-in-progress: false
@@ -45,6 +48,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
+          ref: ${{ env.RELEASE_PLEASE_BRANCH }}
           persist-credentials: false
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
         with:
@@ -70,7 +74,7 @@ jobs:
           if match is None:
               raise SystemExit("Could not find a stable project version")
           major, minor, patch = map(int, match.groups())
-          version = f"{major}.{minor}.{patch + 1}.dev{os.environ['RUN_NUMBER']}"
+          version = f"{major}.{minor}.{patch}.dev{os.environ['RUN_NUMBER']}"
           content = content[:match.start()] + f'version = "{version}"' + content[match.end():]
           path.write_text(content, encoding="utf-8")
           print(f"Building development version {version}")

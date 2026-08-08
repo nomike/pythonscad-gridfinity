@@ -29,6 +29,11 @@ Publishing jobs are scoped narrowly:
   dispatch of the same workflow) and use protected environments.
 - Pull-request workflows never publish and never receive `id-token: write`.
 
+For development uploads, the workflow run is triggered on `main` and checks out
+`release-please--branches--main--components--pythonscad-gridfinity` before
+building. GitHub environment deployment rules evaluate the workflow run ref,
+not the checked-out ref, so the `testpypi` environment must allow `main`.
+
 ## One-time TestPyPI setup
 
 At <https://test.pypi.org/manage/account/publishing/>, add a pending trusted
@@ -41,8 +46,8 @@ publisher scoped to this repository, workflow, and environment:
 - Environment: `testpypi`
 
 The pending publisher can create the project on its first successful upload.
-Every push to `main` publishes a unique development version with
-`skip-existing`.
+Every release-please branch update is built as a unique development version
+with `skip-existing` by the workflow run on `main`.
 
 ## One-time PyPI setup
 
