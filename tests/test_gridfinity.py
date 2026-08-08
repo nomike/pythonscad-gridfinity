@@ -39,9 +39,12 @@ def test_version_falls_back_when_distribution_missing(monkeypatch):
     def raise_not_found(_name: str) -> str:
         raise PackageNotFoundError
 
-    monkeypatch.setattr(importlib.metadata, "version", raise_not_found)
+    with monkeypatch.context() as context:
+        context.setattr(importlib.metadata, "version", raise_not_found)
+        importlib.reload(gridfinity)
+        assert gridfinity.__version__ == "0.0.0+unknown"
+
     importlib.reload(gridfinity)
-    assert gridfinity.__version__ == "0.0.0+unknown"
 
 
 def test_style_and_mode_constants():

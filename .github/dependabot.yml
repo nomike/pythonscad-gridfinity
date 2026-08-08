@@ -19,4 +19,4 @@ updates:
       interval: weekly
     groups:
       development:
-        dependency-type: development
+        patterns: ["*"]
